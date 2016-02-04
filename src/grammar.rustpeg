@@ -1,0 +1,19 @@
+use super::QueryLine;
+
+#[pub]
+query -> Vec<QueryLine>
+  = (select / where) ++ "\n"
+
+select -> QueryLine
+  = __ "s " __ e:select_entries __ { QueryLine::Select(e) }
+
+select_entries -> Vec<String>
+  = identifier ++ ","
+
+where -> QueryLine
+  = __ "w " left:identifier "=" right:identifier { QueryLine::Where(left, right) }
+
+identifier -> String
+  = __ [a-zA-Z0-9]+ "." [a-zA-Z0-9]+ __ { match_str.to_owned() }
+
+__ = " "*

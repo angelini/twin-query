@@ -1,0 +1,9 @@
+[package]
+name = "twin-query"
+version = "0.1.0"
+authors = ["Alex Angelini <alex.louis.angelini@gmail.com>"]
+
+[dependencies]
+linenoise-rust = "0.1"
+clap = "2.0"
+peg = "0.3"
