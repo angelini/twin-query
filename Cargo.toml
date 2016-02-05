@@ -7,3 +7,4 @@ authors = ["Alex Angelini <alex.louis.angelini@gmail.com>"]
 linenoise-rust = "0.1"
 clap = "2.0"
 peg = "0.3"
+clippy = "*"
