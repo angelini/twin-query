@@ -8,8 +8,8 @@ extern crate linenoise;
 
 use clap::{App, SubCommand};
 use std::fmt;
-use std::fs::File;
 use std::collections::HashMap;
+use std::fs::File;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ColumnName {
@@ -50,14 +50,31 @@ pub enum QueryLine {
 peg_file! grammar("grammar.rustpeg");
 
 #[derive(Debug)]
-struct Entry<T> {
+enum Value {
+    Bool(bool),
+    Int(usize),
+    String(String),
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Value::Bool(v) => write!(f, "{:?}", v),
+            Value::Int(v) => write!(f, "{:?}", v),
+            Value::String(ref v) => write!(f, "{:?}", v),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Entry {
     eid: usize,
-    value: T,
+    value: Value,
     time: usize,
 }
 
-impl<T> Entry<T> {
-    fn new(eid: usize, value: T, time: usize) -> Entry<T> {
+impl Entry {
+    fn new(eid: usize, value: Value, time: usize) -> Entry {
         Entry {
             eid: eid,
             value: value,
@@ -66,20 +83,20 @@ impl<T> Entry<T> {
     }
 }
 
-impl<T: fmt::Display> fmt::Display for Entry<T> {
+impl fmt::Display for Entry {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "({}, {}, {})", self.eid, self.value, self.time)
     }
 }
 
 #[derive(Debug)]
-struct Column<T> {
+struct Column {
     name: ColumnName,
-    values: Vec<Entry<T>>,
+    values: Vec<Entry>,
 }
 
-impl<T> Column<T> {
-    fn new(name: ColumnName) -> Column<T> {
+impl Column {
+    fn new(name: ColumnName) -> Column {
         Column {
             name: name,
             values: vec![],
@@ -87,68 +104,31 @@ impl<T> Column<T> {
     }
 }
 
-#[derive(Debug, PartialEq)]
-enum ColumnType {
-    Bool,
-    Int,
-    String,
-}
-
 #[derive(Debug)]
 struct Db {
-    map: HashMap<ColumnName, (usize, ColumnType)>,
-
-    bool_cols: Vec<Column<bool>>,
-    int_cols: Vec<Column<usize>>,
-    string_cols: Vec<Column<String>>,
+    map: HashMap<ColumnName, usize>,
+    cols: Vec<Column>,
 }
 
 impl Db {
     fn new() -> Db {
         Db {
             map: HashMap::new(),
-            bool_cols: vec![],
-            int_cols: vec![],
-            string_cols: vec![],
+            cols: vec![],
         }
     }
 
-    fn add_column(&mut self, name: ColumnName, t: ColumnType) {
-        match t {
-            ColumnType::Bool => {
-                let index = self.bool_cols.len();
-                self.map.insert(name.clone(), (index, t));
-                self.bool_cols.push(Column::new(name));
-            }
-            ColumnType::Int => {
-                let index = self.int_cols.len();
-                self.map.insert(name.clone(), (index, t));
-                self.int_cols.push(Column::new(name));
-            }
-            ColumnType::String => {
-                let index = self.string_cols.len();
-                self.map.insert(name.clone(), (index, t));
-                self.string_cols.push(Column::new(name));
-            }
-        }
+    fn add_column(&mut self, name: ColumnName) {
+        let index = self.cols.len();
+        self.map.insert(name.clone(), index);
+        self.cols.push(Column::new(name));
     }
 
-    fn add_bool_entry(&mut self, name: &ColumnName, entry: Entry<bool>) {
-        let &(index, ref t) = self.map.get(name).unwrap();
-        assert!(*t == ColumnType::Bool);
-        self.bool_cols[index].values.push(entry)
-    }
-
-    fn add_int_entry(&mut self, name: &ColumnName, entry: Entry<usize>) {
-        let &(index, ref t) = self.map.get(name).unwrap();
-        assert!(*t == ColumnType::Int);
-        self.int_cols[index].values.push(entry)
-    }
-
-    fn add_string_entry(&mut self, name: &ColumnName, entry: Entry<String>) {
-        let &(index, ref t) = self.map.get(name).unwrap();
-        assert!(*t == ColumnType::String);
-        self.string_cols[index].values.push(entry)
+    fn add_entry(&mut self, name: &ColumnName, entry: Entry) {
+        let index = self.map.get(name).unwrap();
+        let mut col = self.cols.get_mut(*index).unwrap();
+        let mut vals = &mut col.values;
+        vals.push(entry);
     }
 }
 
@@ -156,40 +136,22 @@ impl fmt::Display for Db {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f, "\n"));
 
-        for col in &self.bool_cols {
+        for col in &self.cols {
             try!(write!(f, "{} ", col.name));
-        };
-        for col in &self.int_cols {
-            try!(write!(f, "{} ", col.name));
-        };
-        for col in &self.string_cols {
-            try!(write!(f, "{} ", col.name));
-        };
+        }
         try!(write!(f, "\n-----------------------\n"));
 
         for i in 0..10 {
             let mut wrote = false;
-
-            for col in &self.bool_cols {
+            for col in &self.cols {
                 if col.values.len() > i {
                     try!(write!(f, "{} ", col.values[i]));
                     wrote = true;
                 }
-            };
-            for col in &self.int_cols {
-                if col.values.len() > i {
-                    try!(write!(f, "{} ", col.values[i]));
-                    wrote = true;
-                }
-            };
-            for col in &self.string_cols {
-                if col.values.len() > i {
-                    try!(write!(f, "{} ", col.values[i]));
-                    wrote = true;
-                }
-            };
-
-            if wrote { try!(write!(f, "\n")) }
+            }
+            if wrote {
+                try!(write!(f, "\n"))
+            }
         }
         Ok(())
     }
@@ -201,18 +163,24 @@ fn sample_db() -> Db {
     let a = ColumnName::new("table", "a");
     let b = ColumnName::new("table", "b");
 
-    db.add_column(a.clone(), ColumnType::Int);
-    db.add_column(b.clone(), ColumnType::String);
+    db.add_column(a.clone());
+    db.add_column(b.clone());
 
-    db.add_int_entry(&a, Entry::new(1, 1, 0));
-    db.add_int_entry(&a, Entry::new(2, 2, 0));
-    db.add_int_entry(&a, Entry::new(3, 3, 0));
+    db.add_entry(&a, Entry::new(1, Value::Int(1), 0));
+    db.add_entry(&a, Entry::new(2, Value::Int(2), 0));
+    db.add_entry(&a, Entry::new(3, Value::Int(3), 0));
 
-    db.add_string_entry(&b, Entry::<String>::new(1, "first".to_owned(), 0));
-    db.add_string_entry(&b, Entry::new(2, "second".to_owned(), 0));
-    db.add_string_entry(&b, Entry::new(3, "third".to_owned(), 0));
+    db.add_entry(&b, Entry::new(1, Value::String("first".to_owned()), 0));
+    db.add_entry(&b, Entry::new(2, Value::String("second".to_owned()), 0));
+    db.add_entry(&b, Entry::new(3, Value::String("third".to_owned()), 0));
 
     db
+}
+
+fn sample_entries() -> Vec<Entry> {
+    return vec![Entry::new(1, Value::Int(0), 0),
+                Entry::new(2, Value::String("foo".to_owned()), 0),
+                Entry::new(3, Value::Bool(true), 0)];
 }
 
 fn read_query() -> String {
@@ -250,7 +218,7 @@ fn start_repl(path: &str) {
                 println!("query: {:?}", q);
                 println!("{}", db);
             }
-            Err(e) => println!("{}", e)
+            Err(e) => println!("{}", e),
         }
     }
 }
