@@ -67,14 +67,14 @@ impl fmt::Display for Value {
 }
 
 #[derive(Debug)]
-struct Entry {
+struct Entry<T> {
     eid: usize,
-    value: Value,
+    value: T,
     time: usize,
 }
 
-impl Entry {
-    fn new(eid: usize, value: Value, time: usize) -> Entry {
+impl<T> Entry<T> {
+    fn new(eid: usize, value: T, time: usize) -> Entry<T> {
         Entry {
             eid: eid,
             value: value,
@@ -83,23 +83,95 @@ impl Entry {
     }
 }
 
-impl fmt::Display for Entry {
+impl<T: fmt::Display> fmt::Display for Entry<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "({}, {}, {})", self.eid, self.value, self.time)
     }
 }
 
 #[derive(Debug)]
+struct EntryValue {
+    eid: usize,
+    value: Value,
+    time: usize,
+}
+
+impl EntryValue {
+    fn new(eid: usize, value: Value, time: usize) -> EntryValue {
+        EntryValue {
+            eid: eid,
+            value: value,
+            time: time,
+        }
+    }
+}
+
+impl fmt::Display for EntryValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({}, {}, {})", self.eid, self.value, self.time)
+    }
+}
+
+enum ColumnType {
+    Bool,
+    Int,
+    String,
+}
+
+#[derive(Debug)]
+enum Entries {
+    Bool(Vec<Entry<bool>>),
+    Int(Vec<Entry<usize>>),
+    String(Vec<Entry<String>>),
+}
+
+#[derive(Debug)]
 struct Column {
     name: ColumnName,
-    values: Vec<Entry>,
+    entries: Entries,
 }
 
 impl Column {
-    fn new(name: ColumnName) -> Column {
+    fn new(name: ColumnName, t: ColumnType) -> Column {
+        let entries = match t {
+            ColumnType::Bool => Entries::Bool(vec![]),
+            ColumnType::Int => Entries::Int(vec![]),
+            ColumnType::String => Entries::String(vec![]),
+        };
         Column {
             name: name,
-            values: vec![],
+            entries: entries,
+        }
+    }
+
+    fn len(&self) -> usize {
+        match self.entries {
+            Entries::Bool(ref v) => v.len(),
+            Entries::Int(ref v) => v.len(),
+            Entries::String(ref v) => v.len(),
+        }
+    }
+
+    fn get(&self, index: usize) -> Option<EntryValue> {
+        match self.entries {
+            Entries::Bool(ref entries) => {
+                match entries.get(index) {
+                    Some(entry) => Some(EntryValue::new(entry.eid, Value::Bool(entry.value), entry.time)),
+                    None => None
+                }
+            }
+            Entries::Int(ref entries) => {
+                match entries.get(index) {
+                    Some(entry) => Some(EntryValue::new(entry.eid, Value::Int(entry.value), entry.time)),
+                    None => None
+                }
+            }
+            Entries::String(ref entries) => {
+                match entries.get(index) {
+                    Some(entry) => Some(EntryValue::new(entry.eid, Value::String(entry.value.clone()), entry.time)),
+                    None => None
+                }
+            }
         }
     }
 }
@@ -118,17 +190,36 @@ impl Db {
         }
     }
 
-    fn add_column(&mut self, name: ColumnName) {
+    fn add_column(&mut self, name: ColumnName, t: ColumnType) {
         let index = self.cols.len();
         self.map.insert(name.clone(), index);
-        self.cols.push(Column::new(name));
+        self.cols.push(Column::new(name, t));
     }
 
-    fn add_entry(&mut self, name: &ColumnName, entry: Entry) {
-        let index = self.map.get(name).unwrap();
+    fn add_entry(&mut self, name: &ColumnName, entry: EntryValue) {
+        let index = self.map.get(name).expect(&format!("Cannot find column: {}", name));
         let mut col = self.cols.get_mut(*index).unwrap();
-        let mut vals = &mut col.values;
-        vals.push(entry);
+
+        match col.entries {
+            Entries::Bool(ref mut entries) => {
+                match entry.value {
+                    Value::Bool(v) => entries.push(Entry::new(entry.eid, v, entry.time)),
+                    _ => panic!("Wrong type for column: {}, expected Bool", name)
+                }
+            }
+            Entries::Int(ref mut entries) => {
+                match entry.value {
+                    Value::Int(v) => entries.push(Entry::new(entry.eid, v, entry.time)),
+                    _ => panic!("Wrong type for column: {}, expected Int", name)
+                }
+            }
+            Entries::String(ref mut entries) => {
+                match entry.value {
+                    Value::String(v) => entries.push(Entry::new(entry.eid, v, entry.time)),
+                    _ => panic!("Wrong type for column: {}, expected String", name)
+                }
+            }
+        };
     }
 }
 
@@ -144,8 +235,8 @@ impl fmt::Display for Db {
         for i in 0..10 {
             let mut wrote = false;
             for col in &self.cols {
-                if col.values.len() > i {
-                    try!(write!(f, "{} ", col.values[i]));
+                if col.len() > i {
+                    try!(write!(f, "{} ", col.get(i).unwrap()));
                     wrote = true;
                 }
             }
@@ -163,31 +254,25 @@ fn sample_db() -> Db {
     let a = ColumnName::new("table", "a");
     let b = ColumnName::new("table", "b");
 
-    db.add_column(a.clone());
-    db.add_column(b.clone());
+    db.add_column(a.clone(), ColumnType::Int);
+    db.add_column(b.clone(), ColumnType::String);
 
-    db.add_entry(&a, Entry::new(1, Value::Int(1), 0));
-    db.add_entry(&a, Entry::new(2, Value::Int(2), 0));
-    db.add_entry(&a, Entry::new(3, Value::Int(3), 0));
+    db.add_entry(&a, EntryValue::new(1, Value::Int(1), 0));
+    db.add_entry(&a, EntryValue::new(2, Value::Int(2), 0));
+    db.add_entry(&a, EntryValue::new(3, Value::Int(3), 0));
 
-    db.add_entry(&b, Entry::new(1, Value::String("first".to_owned()), 0));
-    db.add_entry(&b, Entry::new(2, Value::String("second".to_owned()), 0));
-    db.add_entry(&b, Entry::new(3, Value::String("third".to_owned()), 0));
+    db.add_entry(&b, EntryValue::new(1, Value::String("first".to_owned()), 0));
+    db.add_entry(&b, EntryValue::new(2, Value::String("second".to_owned()), 0));
+    db.add_entry(&b, EntryValue::new(3, Value::String("third".to_owned()), 0));
 
     db
-}
-
-fn sample_entries() -> Vec<Entry> {
-    return vec![Entry::new(1, Value::Int(0), 0),
-                Entry::new(2, Value::String("foo".to_owned()), 0),
-                Entry::new(3, Value::Bool(true), 0)];
 }
 
 fn read_query() -> String {
     let mut query = "".to_owned();
 
     loop {
-        let line = linenoise::input("").unwrap();
+        let line = linenoise::input("").expect("Cannot read line from console");
         if line == "" {
             let len = query.len();
             if len > 0 {
