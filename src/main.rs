@@ -178,27 +178,25 @@ impl Column {
 
 #[derive(Debug)]
 struct Db {
-    map: HashMap<ColumnName, usize>,
-    cols: Vec<Column>,
+    cols: HashMap<ColumnName, Column>,
 }
 
 impl Db {
     fn new() -> Db {
         Db {
-            map: HashMap::new(),
-            cols: vec![],
+            cols: HashMap::new(),
         }
     }
 
     fn add_column(&mut self, name: ColumnName, t: ColumnType) {
-        let index = self.cols.len();
-        self.map.insert(name.clone(), index);
-        self.cols.push(Column::new(name, t));
+        match self.cols.get(&name) {
+            Some(_) => panic!(format!("Column already exists: {}", name)),
+            None => self.cols.insert(name.clone(), Column::new(name, t))
+        };
     }
 
     fn add_entry(&mut self, name: &ColumnName, entry: EntryValue) {
-        let index = self.map.get(name).expect(&format!("Cannot find column: {}", name));
-        let mut col = self.cols.get_mut(*index).unwrap();
+        let mut col = self.cols.get_mut(name).expect(&format!("Cannot find column: {}", name));
 
         match col.entries {
             Entries::Bool(ref mut entries) => {
@@ -227,14 +225,14 @@ impl fmt::Display for Db {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f, "\n"));
 
-        for col in &self.cols {
-            try!(write!(f, "{} ", col.name));
+        for (name, _) in &self.cols {
+            try!(write!(f, "{} ", name));
         }
         try!(write!(f, "\n-----------------------\n"));
 
         for i in 0..10 {
             let mut wrote = false;
-            for col in &self.cols {
+            for (_, col) in &self.cols {
                 if col.len() > i {
                     try!(write!(f, "{} ", col.get(i).unwrap()));
                     wrote = true;
@@ -253,17 +251,23 @@ fn sample_db() -> Db {
 
     let a = ColumnName::new("table", "a");
     let b = ColumnName::new("table", "b");
+    let c = ColumnName::new("table", "c");
 
-    db.add_column(a.clone(), ColumnType::Int);
-    db.add_column(b.clone(), ColumnType::String);
+    db.add_column(a.clone(), ColumnType::Bool);
+    db.add_column(b.clone(), ColumnType::Int);
+    db.add_column(c.clone(), ColumnType::String);
 
-    db.add_entry(&a, EntryValue::new(1, Value::Int(1), 0));
-    db.add_entry(&a, EntryValue::new(2, Value::Int(2), 0));
-    db.add_entry(&a, EntryValue::new(3, Value::Int(3), 0));
+    db.add_entry(&a, EntryValue::new(1, Value::Bool(true), 0));
+    db.add_entry(&a, EntryValue::new(2, Value::Bool(true), 0));
+    db.add_entry(&a, EntryValue::new(3, Value::Bool(false), 0));
 
-    db.add_entry(&b, EntryValue::new(1, Value::String("first".to_owned()), 0));
-    db.add_entry(&b, EntryValue::new(2, Value::String("second".to_owned()), 0));
-    db.add_entry(&b, EntryValue::new(3, Value::String("third".to_owned()), 0));
+    db.add_entry(&b, EntryValue::new(1, Value::Int(1), 0));
+    db.add_entry(&b, EntryValue::new(2, Value::Int(2), 0));
+    db.add_entry(&b, EntryValue::new(3, Value::Int(3), 0));
+
+    db.add_entry(&c, EntryValue::new(1, Value::String("first".to_owned()), 0));
+    db.add_entry(&c, EntryValue::new(2, Value::String("second".to_owned()), 0));
+    db.add_entry(&c, EntryValue::new(3, Value::String("third".to_owned()), 0));
 
     db
 }
