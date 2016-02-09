@@ -4,11 +4,12 @@ version = "0.1.0"
 authors = ["Alex Angelini <alex.louis.angelini@gmail.com>"]
 
 [dependencies]
-linenoise-rust = "0.1"
+bincode = "0.4"
 clap = "2.0"
+clippy = "*"
+csv = "0.14"
+flate2 = "0.2"
+linenoise-rust = "0.1"
 peg = "0.3"
 rustc-serialize = "0.3"
-bincode = "0.4"
-flate2 = "0.2"
-clippy = "*"
 toml = "0.1"

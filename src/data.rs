@@ -143,20 +143,28 @@ impl Column {
         match self.entries {
             Entries::Bool(ref entries) => {
                 match entries.get(index) {
-                    Some(entry) => Some(EntryValue::new(entry.eid, Value::Bool(entry.value), entry.time)),
-                    None => None
+                    Some(entry) => {
+                        Some(EntryValue::new(entry.eid, Value::Bool(entry.value), entry.time))
+                    }
+                    None => None,
                 }
             }
             Entries::Int(ref entries) => {
                 match entries.get(index) {
-                    Some(entry) => Some(EntryValue::new(entry.eid, Value::Int(entry.value), entry.time)),
-                    None => None
+                    Some(entry) => {
+                        Some(EntryValue::new(entry.eid, Value::Int(entry.value), entry.time))
+                    }
+                    None => None,
                 }
             }
             Entries::String(ref entries) => {
                 match entries.get(index) {
-                    Some(entry) => Some(EntryValue::new(entry.eid, Value::String(entry.value.clone()), entry.time)),
-                    None => None
+                    Some(entry) => {
+                        Some(EntryValue::new(entry.eid,
+                                             Value::String(entry.value.clone()),
+                                             entry.time))
+                    }
+                    None => None,
                 }
             }
         }
@@ -170,23 +178,30 @@ pub enum Error {
     Decoding(serialize::DecodingError),
     NameAlreadyTake(ColumnName),
     NameNotFound(ColumnName),
-    TypeMismatch(ColumnName, ColumnType),
+    ParseError(ColumnName, ColumnType),
 }
 
 #[derive(Debug, RustcEncodable, RustcDecodable)]
 pub struct Db {
     cols: HashMap<ColumnName, Column>,
+    entity_count: usize,
 }
 
 impl Db {
-    pub fn new() -> Db {
+    fn new() -> Db {
         Db {
             cols: HashMap::new(),
+            entity_count: 0,
         }
     }
 
-    pub fn from_file(filename: &str) -> Result<Db, Error> {
-        let file = try!(File::open(filename));
+    pub fn from_file(file_path: &str) -> Result<Db, Error> {
+        if !path::Path::new(file_path).exists() {
+            try!(File::create(file_path));
+            return Ok(Db::new());
+        }
+
+        let file = try!(File::open(file_path));
         let reader = io::BufReader::new(file);
         let mut decoder = ZlibDecoder::new(reader);
         let decoded = try!(serialize::decode_from(&mut decoder, SizeLimit::Infinite));
@@ -203,6 +218,12 @@ impl Db {
         Ok(())
     }
 
+    pub fn next_eid(&mut self) -> usize {
+        let next = self.entity_count;
+        self.entity_count += 1;
+        next
+    }
+
     pub fn add_column(&mut self, name: ColumnName, t: ColumnType) -> Result<(), Error> {
         match self.cols.get(&name) {
             Some(_) => Err(Error::NameAlreadyTake(name)),
@@ -213,31 +234,27 @@ impl Db {
         }
     }
 
-    pub fn add_entry(&mut self, name: &ColumnName, entry: EntryValue) -> Result<(), Error> {
+    pub fn add_entry(&mut self, name: &ColumnName, eid: usize, value: String, time: usize)
+                     -> Result<(), Error> {
         let mut col = match self.cols.get_mut(name) {
             Some(c) => c,
-            None => return Err(Error::NameNotFound(name.to_owned()))
+            None => return Err(Error::NameNotFound(name.to_owned())),
         };
 
         match col.entries {
             Entries::Bool(ref mut entries) => {
-                match entry.value {
-                    Value::Bool(v) => entries.push(Entry::new(entry.eid, v, entry.time)),
-                    _ => return Err(Error::TypeMismatch(name.to_owned(), ColumnType::Bool))
+                match value.parse::<bool>() {
+                    Ok(v) => entries.push(Entry::new(eid, v, time)),
+                    Err(_) => return Err(Error::ParseError(name.to_owned(), ColumnType::Bool)),
                 }
             }
             Entries::Int(ref mut entries) => {
-                match entry.value {
-                    Value::Int(v) => entries.push(Entry::new(entry.eid, v, entry.time)),
-                    _ => return Err(Error::TypeMismatch(name.to_owned(), ColumnType::Int))
+                match value.parse::<usize>() {
+                    Ok(v) => entries.push(Entry::new(eid, v, time)),
+                    _ => return Err(Error::ParseError(name.to_owned(), ColumnType::Int)),
                 }
             }
-            Entries::String(ref mut entries) => {
-                match entry.value {
-                    Value::String(v) => entries.push(Entry::new(entry.eid, v, entry.time)),
-                    _ => return Err(Error::TypeMismatch(name.to_owned(), ColumnType::String))
-                }
-            }
+            Entries::String(ref mut entries) => entries.push(Entry::new(eid, value, time)),
         };
         Ok(())
     }
