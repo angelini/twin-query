@@ -8,11 +8,14 @@ extern crate clap;
 extern crate flate2;
 extern crate linenoise;
 extern crate rustc_serialize;
+extern crate toml;
 
 mod data;
 
 use clap::{App, SubCommand};
+use std::collections::HashMap;
 use std::fs::File;
+use std::io::Read;
 
 use data::{ColumnName, ColumnType, Db, EntryValue, Error, Value};
 
@@ -104,7 +107,27 @@ fn create_db(file_path: &str) {
     File::create(file_path).unwrap();
 }
 
+#[derive(Debug, RustcEncodable, RustcDecodable)]
+struct Schema {
+    table: String,
+    columns: HashMap<String, String>,
+    time_column: String,
+    csv_ordering: Vec<String>,
+}
+
+fn read_schema(schema_path: &str) -> Schema {
+    let mut contents = String::new();
+    File::open(schema_path)
+        .and_then(|mut f| f.read_to_string(&mut contents))
+        .unwrap();
+
+    toml::decode_str(&contents).unwrap()
+}
+
 fn add_to_db(file_path: &str, schema_path: &str, csv_path: &str) {
+    let schema = read_schema(schema_path);
+    println!("schema: {:?}", schema);
+
     match sample_db() {
         Ok(db) => db.write(file_path).unwrap(),
         Err(e) => println!("e: {:?}", e),
