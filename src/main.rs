@@ -3,8 +3,11 @@
 #![plugin(clippy)]
 #![allow(len_zero)] // for pegile macro
 
+extern crate bincode;
 extern crate clap;
+extern crate flate2;
 extern crate linenoise;
+extern crate rustc_serialize;
 
 mod data;
 
@@ -50,7 +53,8 @@ fn sample_db() -> Db {
     db.add_entry(&b, EntryValue::new(3, Value::Int(3), 0));
 
     db.add_entry(&c, EntryValue::new(1, Value::String("first".to_owned()), 0));
-    db.add_entry(&c, EntryValue::new(2, Value::String("second".to_owned()), 0));
+    db.add_entry(&c,
+                 EntryValue::new(2, Value::String("second".to_owned()), 0));
     db.add_entry(&c, EntryValue::new(3, Value::String("third".to_owned()), 0));
 
     db
@@ -76,7 +80,7 @@ fn start_repl(path: &str) {
     linenoise::history_set_max_len(1000);
     linenoise::history_load(".history");
 
-    let db = sample_db();
+    let db = Db::from_file(path).unwrap();
 
     loop {
         println!("---");
@@ -96,8 +100,13 @@ fn start_repl(path: &str) {
     }
 }
 
-fn create_db(path: &str) {
-    File::create(path);
+fn create_db(file_path: &str) {
+    File::create(file_path).unwrap();
+}
+
+fn add_to_db(file_path: &str, schema_path: &str, csv_path: &str) {
+    let db = sample_db();
+    db.write(file_path).unwrap();
 }
 
 fn main() {
@@ -122,9 +131,8 @@ fn main() {
     }
 
     if let Some(matches) = matches.subcommand_matches("add") {
-        println!("in add {:?} {:?} {:?}",
-                 matches.value_of("FILE"),
-                 matches.value_of("SCHEMA"),
-                 matches.value_of("DATA"));
+        add_to_db(matches.value_of("FILE").unwrap(),
+                  matches.value_of("SCHEMA").unwrap(),
+                  matches.value_of("DATA").unwrap());
     }
 }

@@ -1,5 +1,14 @@
+use bincode;
+use bincode::SizeLimit;
+use bincode::rustc_serialize as serialize;
+use flate2::write::ZlibEncoder;
+use flate2::read::ZlibDecoder;
+use flate2::Compression;
 use std::collections::HashMap;
 use std::fmt;
+use std::fs::File;
+use std::io;
+use std::path;
 
 #[derive(Debug)]
 pub enum Value {
@@ -18,7 +27,7 @@ impl fmt::Display for Value {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, RustcEncodable, RustcDecodable)]
 struct Entry<T> {
     eid: usize,
     value: T,
@@ -64,7 +73,7 @@ impl fmt::Display for EntryValue {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct ColumnName {
     table: String,
     column: String,
@@ -91,14 +100,14 @@ pub enum ColumnType {
     String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, RustcEncodable, RustcDecodable)]
 enum Entries {
     Bool(Vec<Entry<bool>>),
     Int(Vec<Entry<usize>>),
     String(Vec<Entry<String>>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, RustcEncodable, RustcDecodable)]
 struct Column {
     name: ColumnName,
     entries: Entries,
@@ -154,6 +163,13 @@ impl Column {
 }
 
 #[derive(Debug)]
+pub enum Error {
+    Io(io::Error),
+    Encoding(serialize::EncodingError),
+    Decoding(serialize::DecodingError),
+}
+
+#[derive(Debug, RustcEncodable, RustcDecodable)]
 pub struct Db {
     cols: HashMap<ColumnName, Column>,
 }
@@ -163,6 +179,24 @@ impl Db {
         Db {
             cols: HashMap::new(),
         }
+    }
+
+    pub fn from_file(filename: &str) -> Result<Db, Error> {
+        let file = try!(File::open(filename));
+        let reader = io::BufReader::new(file);
+        let mut decoder = ZlibDecoder::new(reader);
+        let decoded = try!(serialize::decode_from(&mut decoder, SizeLimit::Infinite));
+
+        Ok(decoded)
+    }
+
+    pub fn write(&self, filename: &str) -> Result<(), Error> {
+        let path = path::Path::new(filename);
+        let writer = io::BufWriter::new(try!(File::create(path)));
+        let mut encoder = ZlibEncoder::new(writer, Compression::Fast);
+
+        try!(bincode::rustc_serialize::encode_into(self, &mut encoder, SizeLimit::Infinite));
+        Ok(())
     }
 
     pub fn add_column(&mut self, name: ColumnName, t: ColumnType) {
@@ -220,5 +254,23 @@ impl fmt::Display for Db {
             }
         }
         Ok(())
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
+        Error::Io(err)
+    }
+}
+
+impl From<serialize::EncodingError> for Error {
+    fn from(err: serialize::EncodingError) -> Error {
+        Error::Encoding(err)
+    }
+}
+
+impl From<serialize::DecodingError> for Error {
+    fn from(err: serialize::DecodingError) -> Error {
+        Error::Decoding(err)
     }
 }
