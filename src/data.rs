@@ -94,6 +94,7 @@ impl fmt::Display for ColumnName {
     }
 }
 
+#[derive(Debug)]
 pub enum ColumnType {
     Bool,
     Int,
@@ -167,6 +168,9 @@ pub enum Error {
     Io(io::Error),
     Encoding(serialize::EncodingError),
     Decoding(serialize::DecodingError),
+    NameAlreadyTake(ColumnName),
+    NameNotFound(ColumnName),
+    TypeMismatch(ColumnName, ColumnType),
 }
 
 #[derive(Debug, RustcEncodable, RustcDecodable)]
@@ -199,36 +203,43 @@ impl Db {
         Ok(())
     }
 
-    pub fn add_column(&mut self, name: ColumnName, t: ColumnType) {
+    pub fn add_column(&mut self, name: ColumnName, t: ColumnType) -> Result<(), Error> {
         match self.cols.get(&name) {
-            Some(_) => panic!(format!("Column already exists: {}", name)),
-            None => self.cols.insert(name.clone(), Column::new(name, t))
-        };
+            Some(_) => Err(Error::NameAlreadyTake(name)),
+            None => {
+                self.cols.insert(name.clone(), Column::new(name, t));
+                Ok(())
+            }
+        }
     }
 
-    pub fn add_entry(&mut self, name: &ColumnName, entry: EntryValue) {
-        let mut col = self.cols.get_mut(name).expect(&format!("Cannot find column: {}", name));
+    pub fn add_entry(&mut self, name: &ColumnName, entry: EntryValue) -> Result<(), Error> {
+        let mut col = match self.cols.get_mut(name) {
+            Some(c) => c,
+            None => return Err(Error::NameNotFound(name.to_owned()))
+        };
 
         match col.entries {
             Entries::Bool(ref mut entries) => {
                 match entry.value {
                     Value::Bool(v) => entries.push(Entry::new(entry.eid, v, entry.time)),
-                    _ => panic!("Wrong type for column: {}, expected Bool", name)
+                    _ => return Err(Error::TypeMismatch(name.to_owned(), ColumnType::Bool))
                 }
             }
             Entries::Int(ref mut entries) => {
                 match entry.value {
                     Value::Int(v) => entries.push(Entry::new(entry.eid, v, entry.time)),
-                    _ => panic!("Wrong type for column: {}, expected Int", name)
+                    _ => return Err(Error::TypeMismatch(name.to_owned(), ColumnType::Int))
                 }
             }
             Entries::String(ref mut entries) => {
                 match entry.value {
                     Value::String(v) => entries.push(Entry::new(entry.eid, v, entry.time)),
-                    _ => panic!("Wrong type for column: {}, expected String", name)
+                    _ => return Err(Error::TypeMismatch(name.to_owned(), ColumnType::String))
                 }
             }
         };
+        Ok(())
     }
 }
 

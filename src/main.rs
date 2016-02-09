@@ -14,7 +14,7 @@ mod data;
 use clap::{App, SubCommand};
 use std::fs::File;
 
-use data::{ColumnName, ColumnType, Db, EntryValue, Value};
+use data::{ColumnName, ColumnType, Db, EntryValue, Error, Value};
 
 #[derive(Debug)]
 pub enum Comparator {
@@ -33,31 +33,31 @@ pub enum QueryLine {
 
 peg_file! grammar("grammar.rustpeg");
 
-fn sample_db() -> Db {
+fn sample_db() -> Result<Db, Error> {
     let mut db = Db::new();
 
     let a = ColumnName::new("table", "a");
     let b = ColumnName::new("table", "b");
     let c = ColumnName::new("table", "c");
 
-    db.add_column(a.clone(), ColumnType::Bool);
-    db.add_column(b.clone(), ColumnType::Int);
-    db.add_column(c.clone(), ColumnType::String);
+    try!(db.add_column(a.clone(), ColumnType::Bool));
+    try!(db.add_column(b.clone(), ColumnType::Int));
+    try!(db.add_column(c.clone(), ColumnType::String));
 
-    db.add_entry(&a, EntryValue::new(1, Value::Bool(true), 0));
-    db.add_entry(&a, EntryValue::new(2, Value::Bool(true), 0));
-    db.add_entry(&a, EntryValue::new(3, Value::Bool(false), 0));
+    try!(db.add_entry(&a, EntryValue::new(1, Value::Bool(true), 0)));
+    try!(db.add_entry(&a, EntryValue::new(2, Value::Bool(true), 0)));
+    try!(db.add_entry(&a, EntryValue::new(3, Value::Bool(false), 0)));
 
-    db.add_entry(&b, EntryValue::new(1, Value::Int(1), 0));
-    db.add_entry(&b, EntryValue::new(2, Value::Int(2), 0));
-    db.add_entry(&b, EntryValue::new(3, Value::Int(3), 0));
+    try!(db.add_entry(&b, EntryValue::new(1, Value::Int(1), 0)));
+    try!(db.add_entry(&b, EntryValue::new(2, Value::Int(2), 0)));
+    try!(db.add_entry(&b, EntryValue::new(3, Value::Int(3), 0)));
 
-    db.add_entry(&c, EntryValue::new(1, Value::String("first".to_owned()), 0));
-    db.add_entry(&c,
-                 EntryValue::new(2, Value::String("second".to_owned()), 0));
-    db.add_entry(&c, EntryValue::new(3, Value::String("third".to_owned()), 0));
+    try!(db.add_entry(&c, EntryValue::new(1, Value::String("first".to_owned()), 0)));
+    try!(db.add_entry(&c,
+                      EntryValue::new(2, Value::String("second".to_owned()), 0)));
+    try!(db.add_entry(&c, EntryValue::new(3, Value::String("third".to_owned()), 0)));
 
-    db
+    Ok(db)
 }
 
 fn read_query() -> String {
@@ -105,8 +105,10 @@ fn create_db(file_path: &str) {
 }
 
 fn add_to_db(file_path: &str, schema_path: &str, csv_path: &str) {
-    let db = sample_db();
-    db.write(file_path).unwrap();
+    match sample_db() {
+        Ok(db) => db.write(file_path).unwrap(),
+        Err(e) => println!("e: {:?}", e),
+    }
 }
 
 fn main() {
