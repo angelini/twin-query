@@ -12,6 +12,7 @@ extern crate rustc_serialize;
 extern crate toml;
 
 mod data;
+mod query;
 
 use clap::{App, SubCommand};
 use std::collections::HashMap;
@@ -19,25 +20,11 @@ use std::fs::File;
 use std::io::Read;
 
 use data::{ColumnName, ColumnType, Db};
-
-#[derive(Debug)]
-pub enum Comparator {
-    Equal,
-    Greater,
-    GreaterOrEqual,
-    Less,
-    LessOrEqual,
-}
-
-#[derive(Debug)]
-pub enum QueryLine {
-    Select(Vec<ColumnName>),
-    Where(ColumnName, Comparator, ColumnName),
-}
+use query::{Plan};
 
 peg_file! grammar("grammar.rustpeg");
 
-fn read_query() -> String {
+fn read_query_raw() -> String {
     let mut query = "".to_owned();
 
     loop {
@@ -61,19 +48,24 @@ fn start_repl(path: &str) {
 
     loop {
         println!("---");
-        let query_raw = read_query();
-        let query = grammar::query(&query_raw);
+        let query_raw = read_query_raw();
 
         linenoise::history_save(".history");
         linenoise::history_add(&query_raw);
 
-        match query {
-            Ok(q) => {
-                println!("query: {:?}", q);
-                println!("{}", db);
+        let query_lines = grammar::query(&query_raw);
+        // TODO: Validate query
+
+        let plan = match query_lines {
+            Ok(lines) => Plan::new(lines),
+            Err(e) => {
+                println!("{}", e);
+                continue
             }
-            Err(e) => println!("{}", e),
-        }
+        };
+
+        println!("plan: {:?}", plan);
+        println!("{}", db);
     }
 }
 

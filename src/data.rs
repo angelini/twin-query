@@ -75,8 +75,8 @@ impl fmt::Display for EntryValue {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, RustcEncodable, RustcDecodable)]
 pub struct ColumnName {
-    table: String,
-    column: String,
+    pub table: String,
+    pub column: String,
 }
 
 impl ColumnName {
@@ -142,30 +142,24 @@ impl Column {
     fn get(&self, index: usize) -> Option<EntryValue> {
         match self.entries {
             Entries::Bool(ref entries) => {
-                match entries.get(index) {
-                    Some(entry) => {
-                        Some(EntryValue::new(entry.eid, Value::Bool(entry.value), entry.time))
-                    }
-                    None => None,
-                }
+                entries.get(index)
+                       .and_then(|entry| {
+                           Some(EntryValue::new(entry.eid, Value::Bool(entry.value), entry.time))
+                       })
             }
             Entries::Int(ref entries) => {
-                match entries.get(index) {
-                    Some(entry) => {
-                        Some(EntryValue::new(entry.eid, Value::Int(entry.value), entry.time))
-                    }
-                    None => None,
-                }
+                entries.get(index)
+                       .and_then(|entry| {
+                           Some(EntryValue::new(entry.eid, Value::Int(entry.value), entry.time))
+                       })
             }
             Entries::String(ref entries) => {
-                match entries.get(index) {
-                    Some(entry) => {
-                        Some(EntryValue::new(entry.eid,
-                                             Value::String(entry.value.clone()),
-                                             entry.time))
-                    }
-                    None => None,
-                }
+                entries.get(index)
+                       .and_then(|entry| {
+                           Some(EntryValue::new(entry.eid,
+                                                Value::String(entry.value.clone()),
+                                                entry.time))
+                       })
             }
         }
     }

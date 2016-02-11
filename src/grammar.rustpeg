@@ -1,5 +1,5 @@
-use super::{QueryLine, Comparator};
 use data::{ColumnName};
+use query::{Comparator, QueryLine};
 
 #[pub]
 query -> Vec<QueryLine>
