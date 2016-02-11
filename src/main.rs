@@ -8,6 +8,7 @@ extern crate clap;
 extern crate csv;
 extern crate flate2;
 extern crate linenoise;
+extern crate petgraph;
 extern crate rustc_serialize;
 extern crate toml;
 

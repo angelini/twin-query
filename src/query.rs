@@ -1,6 +1,9 @@
+use petgraph::Graph;
+use petgraph::graph::NodeIndex;
+
 use data::ColumnName;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Comparator {
     Equal,
     Greater,
@@ -15,13 +18,13 @@ pub enum QueryLine {
     Where(ColumnName, Comparator, ColumnName), /* FIXME: Where needs to support constants in the rh column */
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum QueryNode {
     Select(ColumnName),
     Where(ColumnName, Comparator, ColumnName),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct PlanNode {
     node: QueryNode,
     require: Option<ColumnName>,
@@ -31,8 +34,12 @@ struct PlanNode {
 impl PlanNode {
     fn from_query_node(node: QueryNode) -> PlanNode {
         let require = match node {
-            QueryNode::Select(ref name) => Some(name.to_owned()),
-            QueryNode::Where(_, _, ref right) => Some(right.to_owned()),
+            QueryNode::Select(ref name) => {
+                Some(ColumnName::new(name.table.to_owned(), "eid".to_owned()))
+            }
+            QueryNode::Where(_, _, ref right) => {
+                Some(ColumnName::new(right.table.to_owned(), "eid".to_owned()))
+            }
         };
 
         let provide = match node {
@@ -50,11 +57,6 @@ impl PlanNode {
     }
 }
 
-#[derive(Debug)]
-pub struct Plan {
-    nodes: Vec<PlanNode>,
-}
-
 fn parse_line(line: QueryLine) -> Vec<PlanNode> {
     match line {
         QueryLine::Select(cols) => {
@@ -68,9 +70,31 @@ fn parse_line(line: QueryLine) -> Vec<PlanNode> {
     }
 }
 
+#[derive(Debug)]
+pub struct Plan {
+    graph: Graph<PlanNode, ColumnName>,
+}
+
 impl Plan {
     pub fn new(lines: Vec<QueryLine>) -> Plan {
-        let nodes = lines.into_iter().flat_map(parse_line).collect();
-        Plan { nodes: nodes }
+        let mut graph = Graph::new();
+
+        let node_indices = lines.into_iter()
+            .flat_map(parse_line)
+            .map(|node| {
+                (graph.add_node(node.clone()), node)
+            })
+            .collect::<Vec<(NodeIndex, PlanNode)>>();
+
+        for &(node_index, ref node) in &node_indices {
+            for &(inner_index, ref inner) in &node_indices {
+                println!("looking for: {:?}", node.require);
+                if node.require.is_some() && node.require == inner.provide {
+                    graph.add_edge(node_index, inner_index, node.require.clone().unwrap());
+                }
+            }
+        }
+
+        Plan { graph: graph }
     }
 }

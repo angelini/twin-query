@@ -9,6 +9,7 @@ dependencies = [
  "flate2 0.2.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "linenoise-rust 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "peg 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "petgraph 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.16 (registry+https://github.com/rust-lang/crates.io-index)",
  "toml 0.1.27 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -78,6 +79,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "fixedbitset"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "flate2"
 version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -136,6 +142,14 @@ dependencies = [
 name = "peg"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "petgraph"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "fixedbitset 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "rand"
