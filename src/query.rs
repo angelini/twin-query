@@ -1,7 +1,7 @@
 use petgraph::Graph;
 use petgraph::graph::NodeIndex;
 
-use data::ColumnName;
+use data::{ColumnName, Value};
 
 #[derive(Debug, Clone)]
 pub enum Comparator {
@@ -12,16 +12,27 @@ pub enum Comparator {
     LessOrEqual,
 }
 
+#[derive(Debug, Clone)]
+pub enum Lhs {
+    Column(ColumnName),
+}
+
+#[derive(Debug, Clone)]
+pub enum Rhs {
+    Column(ColumnName),
+    Constant(Value),
+}
+
 #[derive(Debug)]
 pub enum QueryLine {
     Select(Vec<ColumnName>),
-    Where(ColumnName, Comparator, ColumnName), /* FIXME: Where needs to support constants in the rh column */
+    Where(Lhs, Comparator, Rhs),
 }
 
 #[derive(Debug, Clone)]
 enum QueryNode {
     Select(ColumnName),
-    Where(ColumnName, Comparator, ColumnName),
+    Where(Lhs, Comparator, Rhs),
 }
 
 #[derive(Debug, Clone)]
@@ -37,13 +48,14 @@ impl PlanNode {
             QueryNode::Select(ref name) => {
                 Some(ColumnName::new(name.table.to_owned(), "eid".to_owned()))
             }
-            QueryNode::Where(_, _, ref right) => {
+            QueryNode::Where(_, _, Rhs::Column(ref right)) => {
                 Some(ColumnName::new(right.table.to_owned(), "eid".to_owned()))
-            }
+            },
+            _ => None,
         };
 
         let provide = match node {
-            QueryNode::Where(ref left, _, _) => {
+            QueryNode::Where(Lhs::Column(ref left), _, _) => {
                 Some(ColumnName::new(left.table.to_owned(), "eid".to_owned()))
             }
             _ => None,
@@ -88,7 +100,6 @@ impl Plan {
 
         for &(node_index, ref node) in &node_indices {
             for &(inner_index, ref inner) in &node_indices {
-                println!("looking for: {:?}", node.require);
                 if node.require.is_some() && node.require == inner.provide {
                     graph.add_edge(node_index, inner_index, node.require.clone().unwrap());
                 }

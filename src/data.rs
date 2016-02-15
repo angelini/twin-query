@@ -10,7 +10,7 @@ use std::fs::File;
 use std::io;
 use std::path;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Bool(bool),
     Int(usize),
