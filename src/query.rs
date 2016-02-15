@@ -1,5 +1,7 @@
-use petgraph::Graph;
+use petgraph::{Dfs, EdgeDirection, Graph};
 use petgraph::graph::NodeIndex;
+use std::cmp;
+use std::collections::HashSet;
 
 use data::{ColumnName, Value};
 
@@ -82,14 +84,25 @@ fn parse_line(line: QueryLine) -> Vec<PlanNode> {
     }
 }
 
+fn find_stage_index(stages: &[HashSet<NodeIndex>], node: &NodeIndex) -> Option<usize> {
+    for (idx, stage) in stages.iter().enumerate() {
+        if stage.contains(node) {
+            return Some(idx);
+        }
+    };
+    None
+}
+
 #[derive(Debug)]
 pub struct Plan {
     graph: Graph<PlanNode, ColumnName>,
+    stages: Vec<HashSet<NodeIndex>>,
 }
 
 impl Plan {
     pub fn new(lines: Vec<QueryLine>) -> Plan {
         let mut graph = Graph::new();
+        let mut stages = vec![];
 
         let node_indices = lines.into_iter()
             .flat_map(parse_line)
@@ -106,6 +119,31 @@ impl Plan {
             }
         }
 
-        Plan { graph: graph }
+        for external in graph.externals(EdgeDirection::Incoming) {
+            let mut dfs = Dfs::new(&graph, external);
+            while let Some(node) = dfs.next(&graph) {
+                let mut max_depth = -1;
+                let provides = graph.neighbors_directed(node, EdgeDirection::Incoming);
+
+                for provide in provides {
+                    match find_stage_index(&stages, &provide) {
+                        Some(stage_index) => {
+                            max_depth = cmp::max(max_depth, stage_index as isize)
+                        }
+                        _ => continue
+                    }
+                }
+
+                let stage_index = (max_depth + 1) as usize;
+
+                if stage_index >= stages.len() {
+                    stages.push(HashSet::new())
+                }
+                stages[stage_index].insert(node);
+            }
+        }
+
+        stages.reverse();
+        Plan { graph: graph, stages: stages }
     }
 }
