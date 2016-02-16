@@ -2,6 +2,7 @@
 #![plugin(peg_syntax_ext)]
 #![plugin(clippy)]
 #![allow(len_zero)] // for pegile macro
+#![allow(len_without_is_empty)]
 
 extern crate bincode;
 extern crate clap;
@@ -14,6 +15,7 @@ extern crate toml;
 
 mod data;
 mod query;
+mod exec;
 
 use clap::{App, SubCommand};
 use std::collections::HashMap;
@@ -67,6 +69,8 @@ fn start_repl(path: &str) {
 
         println!("plan: {:?}", plan);
         println!("{}", db);
+
+        println!("exec: {:?}", exec::exec(&db, &plan))
     }
 }
 

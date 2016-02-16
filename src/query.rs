@@ -2,6 +2,7 @@ use petgraph::{Dfs, EdgeDirection, Graph};
 use petgraph::graph::NodeIndex;
 use std::cmp;
 use std::collections::HashSet;
+use std::ops::Index;
 
 use data::{ColumnName, Value};
 
@@ -32,7 +33,7 @@ pub enum QueryLine {
 }
 
 #[derive(Debug, Clone)]
-enum QueryNode {
+pub enum QueryNode {
     Select(ColumnName),
     Where(Lhs, Comparator, Rhs),
 }
@@ -48,17 +49,17 @@ impl PlanNode {
     fn from_query_node(node: QueryNode) -> PlanNode {
         let require = match node {
             QueryNode::Select(ref name) => {
-                Some(ColumnName::new(name.table.to_owned(), "eid".to_owned()))
+                Some(name.eid())
             }
             QueryNode::Where(_, _, Rhs::Column(ref right)) => {
-                Some(ColumnName::new(right.table.to_owned(), "eid".to_owned()))
-            },
+                Some(right.eid())
+            }
             _ => None,
         };
 
         let provide = match node {
             QueryNode::Where(Lhs::Column(ref left), _, _) => {
-                Some(ColumnName::new(left.table.to_owned(), "eid".to_owned()))
+                Some(left.eid())
             }
             _ => None,
         };
@@ -89,7 +90,7 @@ fn find_stage_index(stages: &[HashSet<NodeIndex>], node: &NodeIndex) -> Option<u
         if stage.contains(node) {
             return Some(idx);
         }
-    };
+    }
     None
 }
 
@@ -99,17 +100,16 @@ pub struct Plan {
     stages: Vec<HashSet<NodeIndex>>,
 }
 
+// TODO: Nodes in the same stage which act on the same ColumnName should be combined
 impl Plan {
     pub fn new(lines: Vec<QueryLine>) -> Plan {
         let mut graph = Graph::new();
         let mut stages = vec![];
 
         let node_indices = lines.into_iter()
-            .flat_map(parse_line)
-            .map(|node| {
-                (graph.add_node(node.clone()), node)
-            })
-            .collect::<Vec<(NodeIndex, PlanNode)>>();
+                                .flat_map(parse_line)
+                                .map(|node| (graph.add_node(node.clone()), node))
+                                .collect::<Vec<(NodeIndex, PlanNode)>>();
 
         for &(node_index, ref node) in &node_indices {
             for &(inner_index, ref inner) in &node_indices {
@@ -127,10 +127,8 @@ impl Plan {
 
                 for provide in provides {
                     match find_stage_index(&stages, &provide) {
-                        Some(stage_index) => {
-                            max_depth = cmp::max(max_depth, stage_index as isize)
-                        }
-                        _ => continue
+                        Some(stage_index) => max_depth = cmp::max(max_depth, stage_index as isize),
+                        _ => continue,
                     }
                 }
 
@@ -144,6 +142,20 @@ impl Plan {
         }
 
         stages.reverse();
-        Plan { graph: graph, stages: stages }
+        Plan {
+            graph: graph,
+            stages: stages,
+        }
+    }
+
+    pub fn stage_nodes(&self) -> Vec<Vec<&QueryNode>> {
+        self.stages
+            .iter()
+            .map(|stage| {
+                stage.iter()
+                     .map(|node_index| &self.graph.index(node_index.to_owned()).node)
+                     .collect()
+            })
+            .collect()
     }
 }

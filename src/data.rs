@@ -10,7 +10,7 @@ use std::fs::File;
 use std::io;
 use std::path;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Value {
     Bool(bool),
     Int(usize),
@@ -27,11 +27,11 @@ impl fmt::Display for Value {
     }
 }
 
-#[derive(Debug, RustcEncodable, RustcDecodable)]
-struct Entry<T> {
-    eid: usize,
-    value: T,
-    time: usize,
+#[derive(Debug, Clone, RustcEncodable, RustcDecodable)]
+pub struct Entry<T> {
+    pub eid: usize,
+    pub value: T,
+    pub time: usize,
 }
 
 impl<T> Entry<T> {
@@ -86,6 +86,10 @@ impl ColumnName {
             column: column.into(),
         }
     }
+
+    pub fn eid(&self) -> ColumnName {
+        ColumnName::new(self.table.to_owned(), "eid".to_owned())
+    }
 }
 
 impl fmt::Display for ColumnName {
@@ -101,17 +105,17 @@ pub enum ColumnType {
     String,
 }
 
-#[derive(Debug, RustcEncodable, RustcDecodable)]
-enum Entries {
+#[derive(Debug, Clone, RustcEncodable, RustcDecodable)]
+pub enum Entries {
     Bool(Vec<Entry<bool>>),
     Int(Vec<Entry<usize>>),
     String(Vec<Entry<String>>),
 }
 
 #[derive(Debug, RustcEncodable, RustcDecodable)]
-struct Column {
-    name: ColumnName,
-    entries: Entries,
+pub struct Column {
+    pub name: ColumnName,
+    pub entries: Entries,
 }
 
 impl Column {
@@ -133,10 +137,6 @@ impl Column {
             Entries::Int(ref v) => v.len(),
             Entries::String(ref v) => v.len(),
         }
-    }
-
-    fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 
     fn get(&self, index: usize) -> Option<EntryValue> {
@@ -177,7 +177,7 @@ pub enum Error {
 
 #[derive(Debug, RustcEncodable, RustcDecodable)]
 pub struct Db {
-    cols: HashMap<ColumnName, Column>,
+    pub cols: HashMap<ColumnName, Column>,
     entity_count: usize,
 }
 
