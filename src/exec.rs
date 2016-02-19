@@ -6,6 +6,7 @@ type Eids = HashSet<usize>;
 
 type Cache = HashMap<ColumnName, Eids>;
 
+#[derive(Debug)]
 enum Filtered {
     Entries(Entries),
     Eids(Eids),
@@ -119,10 +120,9 @@ fn find_entries(db: &Db, cache: &Cache, node: &QueryNode) -> Result<(ColumnName,
 
 fn insert_or_merge(cache: &mut Cache, name: ColumnName, eids: Eids) {
     let set = match cache.get(&name) {
-        Some(set) => set.clone(),
-        None => Eids::new(),
+        Some(set) => eids.intersection(set).cloned().collect(),
+        None => eids,
     };
-    let set = eids.intersection(&set).cloned().collect();
     cache.insert(name, set);
 }
 
