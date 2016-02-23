@@ -122,8 +122,6 @@ fn add_to_db(file_path: &str, schema_path: &str, csv_path: &str) {
         let time = row.get(time_index).unwrap().parse::<usize>().unwrap();
 
         for (column_name, value) in schema.csv_ordering.iter().zip(row.iter()) {
-            println!("column_name: {:?}", column_name);
-            println!("value: {:?}", value);
             let name = ColumnName::new(schema.table.clone(), column_name.to_owned());
             db.add_entry(&name, eid, value.to_owned(), time).expect("Could not add to db");
         }

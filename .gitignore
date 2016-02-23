@@ -1,2 +1,9 @@
 target
 .history
+data/*
+!data/sample.csv
+!data/sample.db
+!data/sample.schema
+!data/gdp.csv
+!data/gdp.db
+!data/gdp.schema

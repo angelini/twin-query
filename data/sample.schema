@@ -1,0 +1,8 @@
+table = "foo"
+time_column = "a"
+csv_ordering = ["a", "b", "c"]
+
+[columns]
+a = "Int"
+b = "Bool"
+c = "String"
