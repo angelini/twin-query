@@ -22,7 +22,7 @@ rhs -> Rhs
   = c:col_name { Rhs::Column(c) }
   / __ i:int __ { Rhs::Constant(Value::Int(i)) }
   / __ b:bool __ { Rhs::Constant(Value::Bool(b)) }
-  / __ "\"" s:string "\"" __ { Rhs::Constant(Value::String(s)) }
+  / __ "\"" s:string_with_whitespace "\"" __ { Rhs::Constant(Value::String(s)) }
 
 col_names -> Vec<ColumnName>
   = col_name ++ ","
@@ -36,6 +36,9 @@ int -> usize
 bool -> bool
   = "true" { true }
   / "false" { false }
+
+string_with_whitespace -> String
+  = [a-zA-Z0-9 ]+ { match_str.to_owned() }
 
 string -> String
   = [a-zA-Z0-9]+ { match_str.to_owned() }
