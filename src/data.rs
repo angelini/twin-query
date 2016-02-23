@@ -5,6 +5,7 @@ use flate2::write::ZlibEncoder;
 use flate2::read::ZlibDecoder;
 use flate2::Compression;
 use std::collections::HashMap;
+use std::cmp;
 use std::fmt;
 use std::fs::File;
 use std::io;
@@ -112,6 +113,41 @@ pub enum Entries {
     String(Vec<Entry<String>>),
 }
 
+impl Entries {
+    pub fn get(&self, index: usize) -> Option<EntryValue> {
+        match *self {
+            Entries::Bool(ref entries) => {
+                entries.get(index)
+                       .and_then(|entry| {
+                           Some(EntryValue::new(entry.eid, Value::Bool(entry.value), entry.time))
+                       })
+            }
+            Entries::Int(ref entries) => {
+                entries.get(index)
+                       .and_then(|entry| {
+                           Some(EntryValue::new(entry.eid, Value::Int(entry.value), entry.time))
+                       })
+            }
+            Entries::String(ref entries) => {
+                entries.get(index)
+                       .and_then(|entry| {
+                           Some(EntryValue::new(entry.eid,
+                                                Value::String(entry.value.clone()),
+                                                entry.time))
+                       })
+            }
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match *self {
+            Entries::Bool(ref entries) => entries.len(),
+            Entries::Int(ref entries) => entries.len(),
+            Entries::String(ref entries) => entries.len(),
+        }
+    }
+}
+
 #[derive(Debug, RustcEncodable, RustcDecodable)]
 pub struct Column {
     pub name: ColumnName,
@@ -140,28 +176,7 @@ impl Column {
     }
 
     fn get(&self, index: usize) -> Option<EntryValue> {
-        match self.entries {
-            Entries::Bool(ref entries) => {
-                entries.get(index)
-                       .and_then(|entry| {
-                           Some(EntryValue::new(entry.eid, Value::Bool(entry.value), entry.time))
-                       })
-            }
-            Entries::Int(ref entries) => {
-                entries.get(index)
-                       .and_then(|entry| {
-                           Some(EntryValue::new(entry.eid, Value::Int(entry.value), entry.time))
-                       })
-            }
-            Entries::String(ref entries) => {
-                entries.get(index)
-                       .and_then(|entry| {
-                           Some(EntryValue::new(entry.eid,
-                                                Value::String(entry.value.clone()),
-                                                entry.time))
-                       })
-            }
-        }
+        self.entries.get(index)
     }
 }
 
@@ -263,17 +278,13 @@ impl fmt::Display for Db {
         }
         try!(write!(f, "\n-----------------------\n"));
 
-        for i in 0..10 {
-            let mut wrote = false;
+        for i in 0..cmp::min(20, self.entity_count) {
             for (_, col) in &self.cols {
                 if col.len() > i {
                     try!(write!(f, "{} ", col.get(i).unwrap()));
-                    wrote = true;
                 }
             }
-            if wrote {
-                try!(write!(f, "\n"))
-            }
+            try!(write!(f, "\n"))
         }
         Ok(())
     }

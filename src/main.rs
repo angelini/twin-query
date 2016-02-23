@@ -10,6 +10,7 @@ extern crate csv;
 extern crate flate2;
 extern crate linenoise;
 extern crate petgraph;
+extern crate prettytable;
 extern crate rustc_serialize;
 extern crate toml;
 
@@ -18,11 +19,16 @@ mod query;
 mod exec;
 
 use clap::{App, SubCommand};
+use prettytable::Table;
+use prettytable::row::Row;
+use prettytable::cell::Cell;
+use prettytable::format;
+use std::cmp;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 
-use data::{ColumnName, ColumnType, Db};
+use data::{ColumnName, ColumnType, Db, Entries};
 use query::Plan;
 
 peg_file! grammar("grammar.rustpeg");
@@ -42,6 +48,30 @@ fn read_query_raw() -> String {
         query = query + &line + "\n";
     }
 }
+
+fn print_table(cols: &[(ColumnName, Entries)], limit: usize) {
+    let mut table = Table::new();
+    table.set_format(*format::consts::FORMAT_NO_LINESEP_WITH_TITLE);
+
+    let col_names = cols.iter()
+                        .map(|&(ref name, _)| Cell::new(&format!("{}", name)))
+                        .collect::<Vec<Cell>>();
+    table.set_titles(Row::new(col_names));
+
+    let max_col_len = cols.iter().fold(0, |acc, &(_, ref entries)| cmp::max(acc, entries.len()));
+
+    for i in 0..cmp::min(limit, max_col_len) {
+        let mut row = vec![];
+        for &(_, ref entries) in cols.iter() {
+            let entry = entries.get(i).unwrap();
+            row.push(Cell::new(&format!("{}", entry)));
+        }
+        table.add_row(Row::new(row));
+    }
+
+    table.printstd();
+}
+
 
 fn start_repl(path: &str) {
     linenoise::history_set_max_len(1000);
@@ -67,10 +97,16 @@ fn start_repl(path: &str) {
             }
         };
 
-        println!("plan: {:?}", plan);
+        println!("{:?}", plan);
         println!("{}", db);
 
-        println!("exec: {:?}", exec::exec(&db, &plan))
+        match exec::exec(&db, &plan) {
+            Ok(entries) => print_table(&entries, 20),
+            Err(e) => {
+                println!("{:?}", e);
+                continue;
+            }
+        };
     }
 }
 
