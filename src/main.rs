@@ -23,7 +23,7 @@ use std::fs::File;
 use std::io::Read;
 
 use data::{ColumnName, ColumnType, Db};
-use query::{Plan};
+use query::Plan;
 
 peg_file! grammar("grammar.rustpeg");
 
@@ -63,7 +63,7 @@ fn start_repl(path: &str) {
             Ok(lines) => Plan::new(lines),
             Err(e) => {
                 println!("{}", e);
-                continue
+                continue;
             }
         };
 

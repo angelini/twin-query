@@ -48,19 +48,13 @@ struct PlanNode {
 impl PlanNode {
     fn from_query_node(node: QueryNode) -> PlanNode {
         let require = match node {
-            QueryNode::Select(ref name) => {
-                Some(name.eid())
-            }
-            QueryNode::Where(_, _, Rhs::Column(ref right)) => {
-                Some(right.eid())
-            }
+            QueryNode::Select(ref name) => Some(name.eid()),
+            QueryNode::Where(_, _, Rhs::Column(ref right)) => Some(right.eid()),
             _ => None,
         };
 
         let provide = match node {
-            QueryNode::Where(Lhs::Column(ref left), _, _) => {
-                Some(left.eid())
-            }
+            QueryNode::Where(Lhs::Column(ref left), _, _) => Some(left.eid()),
             _ => None,
         };
 
@@ -103,8 +97,27 @@ pub struct Plan {
 // TODO: Nodes in the same stage which act on the same ColumnName should be combined
 impl Plan {
     pub fn new(lines: Vec<QueryLine>) -> Plan {
+        let graph = Self::build_graph(lines);
+        let stages = Self::build_stages(&graph);
+        Plan {
+            graph: graph,
+            stages: stages,
+        }
+    }
+
+    pub fn stage_nodes(&self) -> Vec<Vec<&QueryNode>> {
+        self.stages
+            .iter()
+            .map(|stage| {
+                stage.iter()
+                     .map(|node_index| &self.graph.index(node_index.to_owned()).node)
+                     .collect()
+            })
+            .collect()
+    }
+
+    fn build_graph(lines: Vec<QueryLine>) -> Graph<PlanNode, ColumnName> {
         let mut graph = Graph::new();
-        let mut stages = vec![];
 
         let node_indices = lines.into_iter()
                                 .flat_map(parse_line)
@@ -119,9 +132,15 @@ impl Plan {
             }
         }
 
+        graph
+    }
+
+    fn build_stages(graph: &Graph<PlanNode, ColumnName>) -> Vec<HashSet<NodeIndex>> {
+        let mut stages = vec![];
+
         for external in graph.externals(EdgeDirection::Incoming) {
-            let mut dfs = Dfs::new(&graph, external);
-            while let Some(node) = dfs.next(&graph) {
+            let mut dfs = Dfs::new(graph, external);
+            while let Some(node) = dfs.next(graph) {
                 let mut max_depth = -1;
                 let provides = graph.neighbors_directed(node, EdgeDirection::Incoming);
 
@@ -142,20 +161,6 @@ impl Plan {
         }
 
         stages.reverse();
-        Plan {
-            graph: graph,
-            stages: stages,
-        }
-    }
-
-    pub fn stage_nodes(&self) -> Vec<Vec<&QueryNode>> {
-        self.stages
-            .iter()
-            .map(|stage| {
-                stage.iter()
-                     .map(|node_index| &self.graph.index(node_index.to_owned()).node)
-                     .collect()
-            })
-            .collect()
+        stages
     }
 }
