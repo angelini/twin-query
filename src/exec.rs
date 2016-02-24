@@ -15,6 +15,7 @@ enum Filtered {
 #[derive(Debug)]
 pub enum Error {
     MissingColumn(ColumnName),
+    InvalidJoinColumn(ColumnName),
 }
 
 fn compare(left: &Value, comp: &Comparator, right: &Value) -> bool {
@@ -57,22 +58,14 @@ fn find_eids_by_value(entries: &Entries, comp: &Comparator, value: &Value) -> Ei
     eids
 }
 
-fn match_by_eids<T>(entries: &[Entry<T>], eids: &Eids) -> Eids {
+fn match_by_eids(entries: &[Entry<usize>], eids: &Eids) -> Eids {
     entries.iter()
            .fold(Eids::new(), |mut acc, entry| {
-               if eids.contains(&entry.eid) {
+               if eids.contains(&entry.value) {
                    acc.insert(entry.eid);
                }
                acc
            })
-}
-
-fn find_eids_by_set(entries: &Entries, eids: &Eids) -> Eids {
-    match *entries {
-        Entries::Bool(ref entries) => match_by_eids(entries, eids),
-        Entries::Int(ref entries) => match_by_eids(entries, eids),
-        Entries::String(ref entries) => match_by_eids(entries, eids),
-    }
 }
 
 fn clone_matching_entries<T: Clone>(entries: &[Entry<T>], eids: &Eids) -> Vec<Entry<T>> {
@@ -112,8 +105,12 @@ fn find_entries(db: &Db, cache: &Cache, node: &QueryNode) -> Result<(ColumnName,
             let eids = try!(cache.get(&right_eid).ok_or(Error::MissingColumn(right_eid)));
             let column = try!(db.cols.get(left).ok_or(Error::MissingColumn(left.to_owned())));
 
-            Ok((left_eid,
-                Filtered::Eids(find_eids_by_set(&column.entries, &eids))))
+            match column.entries {
+                Entries::Int(ref entries) => {
+                    Ok((left_eid, Filtered::Eids(match_by_eids(entries, eids))))
+                }
+                _ => Err(Error::InvalidJoinColumn(left.to_owned()))
+            }
         }
     }
 }
