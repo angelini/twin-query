@@ -1,7 +1,9 @@
 use petgraph::{Dfs, EdgeDirection, Graph};
+use petgraph::dot::Dot;
 use petgraph::graph::NodeIndex;
 use std::cmp;
 use std::collections::HashSet;
+use std::fmt;
 use std::ops::Index;
 
 use data::{ColumnName, Value};
@@ -63,6 +65,12 @@ impl PlanNode {
             require: require,
             provide: provide,
         }
+    }
+}
+
+impl fmt::Display for PlanNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.node)
     }
 }
 
@@ -162,5 +170,12 @@ impl Plan {
 
         stages.reverse();
         stages
+    }
+}
+
+impl fmt::Display for Plan {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "Plan: {:?}\n", self.stages));
+        write!(f, "{}", Dot::new(&self.graph))
     }
 }

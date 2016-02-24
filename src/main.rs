@@ -49,7 +49,10 @@ fn read_query_raw() -> String {
     }
 }
 
-fn print_table(cols: &[(ColumnName, Entries)], limit: usize) {
+fn print_table(cols: Vec<(&ColumnName, &Entries)>, limit: usize) {
+    let mut cols = cols;
+    cols.sort_by(|a, b| format!("{}", a.0).cmp(&format!("{}", b.0)));
+
     let mut table = Table::new();
     table.set_format(*format::consts::FORMAT_NO_LINESEP_WITH_TITLE);
 
@@ -62,7 +65,7 @@ fn print_table(cols: &[(ColumnName, Entries)], limit: usize) {
 
     for i in 0..cmp::min(limit, max_col_len) {
         let mut row = vec![];
-        for &(_, ref entries) in cols.iter() {
+        for &(_, ref entries) in &cols {
             let entry = entries.get(i).unwrap();
             row.push(Cell::new(&format!("{}", entry)));
         }
@@ -80,7 +83,7 @@ fn start_repl(path: &str) {
     let db = Db::from_file(path).expect("Cannot load db from file");
 
     loop {
-        println!("---");
+        println!("\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
         let query_raw = read_query_raw();
 
         linenoise::history_save(".history");
@@ -92,16 +95,28 @@ fn start_repl(path: &str) {
         let plan = match query_lines {
             Ok(lines) => Plan::new(lines),
             Err(e) => {
-                println!("{}", e);
+                println!("ERROR: {}", e);
                 continue;
             }
         };
 
-        println!("{:?}", plan);
-        println!("{}", db);
+        println!("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n");
+        println!("{}", plan);
+
+        let names_and_entries = db.cols
+                                  .iter()
+                                  .map(|(name, col)| (name, &col.entries))
+                                  .collect::<Vec<(&ColumnName, &Entries)>>();
+        print_table(names_and_entries, 20);
+        println!("");
 
         match exec::exec(&db, &plan) {
-            Ok(entries) => print_table(&entries, 20),
+            Ok(entries) => {
+                print_table(entries.iter()
+                                   .map(|&(ref n, ref e)| (n, e))
+                                   .collect(),
+                            20)
+            }
             Err(e) => {
                 println!("{:?}", e);
                 continue;

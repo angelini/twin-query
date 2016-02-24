@@ -5,7 +5,6 @@ use flate2::write::ZlibEncoder;
 use flate2::read::ZlibDecoder;
 use flate2::Compression;
 use std::collections::HashMap;
-use std::cmp;
 use std::fmt;
 use std::fs::File;
 use std::io;
@@ -166,18 +165,6 @@ impl Column {
             entries: entries,
         }
     }
-
-    fn len(&self) -> usize {
-        match self.entries {
-            Entries::Bool(ref v) => v.len(),
-            Entries::Int(ref v) => v.len(),
-            Entries::String(ref v) => v.len(),
-        }
-    }
-
-    fn get(&self, index: usize) -> Option<EntryValue> {
-        self.entries.get(index)
-    }
 }
 
 #[derive(Debug)]
@@ -265,27 +252,6 @@ impl Db {
             }
             Entries::String(ref mut entries) => entries.push(Entry::new(eid, value, time)),
         };
-        Ok(())
-    }
-}
-
-impl fmt::Display for Db {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "\n"));
-
-        for (name, _) in &self.cols {
-            try!(write!(f, "{} ", name));
-        }
-        try!(write!(f, "\n-----------------------\n"));
-
-        for i in 0..cmp::min(20, self.entity_count) {
-            for (_, col) in &self.cols {
-                if col.len() > i {
-                    try!(write!(f, "{} ", col.get(i).unwrap()));
-                }
-            }
-            try!(write!(f, "\n"))
-        }
         Ok(())
     }
 }
