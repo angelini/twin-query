@@ -97,6 +97,7 @@ fn start_repl(path: &str) {
                 let valid = p.is_valid();
 
                 if valid.is_err() {
+                    println!("{}", p);
                     println!("{:?}", valid);
                     continue;
                 }

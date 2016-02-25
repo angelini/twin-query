@@ -15,40 +15,50 @@ enum Filtered {
 #[derive(Debug)]
 pub enum Error {
     MissingColumn(ColumnName),
-    InvalidJoinColumn(ColumnName),
 }
 
-fn compare(left: &Value, comp: &Comparator, right: &Value) -> bool {
-    match *comp {
-        Comparator::Equal => left == right,
-        Comparator::Greater => left > right,
-        Comparator::GreaterOrEqual => left >= right,
-        Comparator::Less => left < right,
-        Comparator::LessOrEqual => left <= right,
-    }
+fn compare(left: &Value, predicates: &[(Comparator, Rhs)], cache: &Cache) -> bool {
+    predicates.iter().fold(true, |acc, predicate| {
+        acc && match *predicate {
+            (Comparator::Equal, Rhs::Constant(ref v)) => left == v,
+            (Comparator::Greater, Rhs::Constant(ref v)) => left > v,
+            (Comparator::GreaterOrEqual, Rhs::Constant(ref v)) => left >= v,
+            (Comparator::Less, Rhs::Constant(ref v)) => left < v,
+            (Comparator::LessOrEqual, Rhs::Constant(ref v)) => left <= v,
+            (Comparator::Equal, Rhs::Column(ref col_name)) => {
+                let col_eid_name = col_name.eid();
+                let eids = cache.get(&col_eid_name).unwrap();
+                match *left {
+                    Value::Int(ref v) => eids.contains(v),
+                    _ => panic!("Invalid query state, join not against int col")
+                }
+            }
+            _ => panic!("Invalid query state, comp with column name")
+        }
+    })
 }
 
-fn find_eids_by_value(entries: &Entries, comp: &Comparator, value: &Value) -> Eids {
+fn match_by_predicates(entries: &Entries, predicates: &[(Comparator, Rhs)], cache: &Cache) -> Eids {
     let mut eids = Eids::new();
 
     match *entries {
         Entries::Bool(ref entries) => {
             for entry in entries {
-                if compare(&Value::Bool(entry.value), comp, value) {
+                if compare(&Value::Bool(entry.value), predicates, cache) {
                     eids.insert(entry.eid);
                 }
             }
         }
         Entries::Int(ref entries) => {
             for entry in entries {
-                if compare(&Value::Int(entry.value), comp, value) {
+                if compare(&Value::Int(entry.value), predicates, cache) {
                     eids.insert(entry.eid);
                 }
             }
         }
         Entries::String(ref entries) => {
             for entry in entries {
-                if compare(&Value::String(entry.value.to_owned()), comp, value) {
+                if compare(&Value::String(entry.value.to_owned()), predicates, cache) {
                     eids.insert(entry.eid);
                 }
             }
@@ -56,16 +66,6 @@ fn find_eids_by_value(entries: &Entries, comp: &Comparator, value: &Value) -> Ei
     }
 
     eids
-}
-
-fn match_by_eids(entries: &[Entry<usize>], eids: &Eids) -> Eids {
-    entries.iter()
-           .fold(Eids::new(), |mut acc, entry| {
-               if eids.contains(&entry.value) {
-                   acc.insert(entry.eid);
-               }
-               acc
-           })
 }
 
 fn clone_matching_entries<T: Clone>(entries: &[Entry<T>], eids: &Eids) -> Vec<Entry<T>> {
@@ -93,24 +93,11 @@ fn find_entries(db: &Db, cache: &Cache, node: &QueryNode) -> Result<(ColumnName,
             Ok((name.to_owned(),
                 Filtered::Entries(find_entries_by_set(&column.entries, &eids))))
         }
-        QueryNode::Where(Lhs::Column(ref left), ref comp, Rhs::Constant(ref v)) => {
+        QueryNode::Where(Lhs::Column(ref left), ref predicates) => {
             let left_eid = left.eid();
             let column = try!(db.cols.get(left).ok_or(Error::MissingColumn(left.to_owned())));
 
-            Ok((left_eid,
-                Filtered::Eids(find_eids_by_value(&column.entries, comp, v))))
-        }
-        QueryNode::Where(Lhs::Column(ref left), _, Rhs::Column(ref right)) => {
-            let (left_eid, right_eid) = (left.eid(), right.eid());
-            let eids = try!(cache.get(&right_eid).ok_or(Error::MissingColumn(right_eid)));
-            let column = try!(db.cols.get(left).ok_or(Error::MissingColumn(left.to_owned())));
-
-            match column.entries {
-                Entries::Int(ref entries) => {
-                    Ok((left_eid, Filtered::Eids(match_by_eids(entries, eids))))
-                }
-                _ => Err(Error::InvalidJoinColumn(left.to_owned()))
-            }
+            Ok((left_eid, Filtered::Eids(match_by_predicates(&column.entries, predicates, cache))))
         }
     }
 }

@@ -37,32 +37,42 @@ pub enum QueryLine {
 #[derive(Debug, Clone)]
 pub enum QueryNode {
     Select(ColumnName),
-    Where(Lhs, Comparator, Rhs),
+    Where(Lhs, Vec<(Comparator, Rhs)>),
 }
 
 #[derive(Debug, Clone)]
 struct PlanNode {
     node: QueryNode,
-    require: Option<ColumnName>,
+    requires: Option<HashSet<ColumnName>>,
     provide: Option<ColumnName>,
 }
 
 impl PlanNode {
     fn from_query_node(node: QueryNode) -> PlanNode {
-        let require = match node {
-            QueryNode::Select(ref name) => Some(name.eid()),
-            QueryNode::Where(_, _, Rhs::Column(ref right)) => Some(right.eid()),
-            _ => None,
+        let requires = match node {
+            QueryNode::Select(ref name) => {
+                let mut set = HashSet::new();
+                set.insert(name.eid());
+                Some(set)
+            }
+            QueryNode::Where(_, ref predicates) => {
+                Some(predicates.iter().fold(HashSet::new(), |mut acc, &(_, ref predicate)| {
+                    if let Rhs::Column(ref c) = *predicate {
+                        acc.insert(c.eid());
+                    }
+                    acc
+                }))
+            }
         };
 
         let provide = match node {
-            QueryNode::Where(Lhs::Column(ref left), _, _) => Some(left.eid()),
+            QueryNode::Where(Lhs::Column(ref left), _) => Some(left.eid()),
             _ => None,
         };
 
         PlanNode {
             node: node,
-            require: require,
+            requires: requires,
             provide: provide,
         }
     }
@@ -82,7 +92,7 @@ fn parse_line(line: QueryLine) -> Vec<PlanNode> {
                 .collect()
         }
         QueryLine::Where(left, comp, right) => {
-            vec![PlanNode::from_query_node(QueryNode::Where(left, comp, right))]
+            vec![PlanNode::from_query_node(QueryNode::Where(left, vec![(comp, right)]))]
         }
     }
 }
@@ -137,7 +147,7 @@ impl Plan {
                                       let plan_node = &self.graph[*node_index];
                                       match plan_node.node {
                                           QueryNode::Select(_) => stage_types.insert(1),
-                                          QueryNode::Where(_, _, _) => stage_types.insert(2),
+                                          QueryNode::Where(_, _) => stage_types.insert(2),
                                       };
                                   }
                                   stage_types
@@ -183,8 +193,13 @@ impl Plan {
 
         for &(node_index, ref node) in &node_indices {
             for &(inner_index, ref inner) in &node_indices {
-                if node.require.is_some() && node.require == inner.provide {
-                    graph.add_edge(node_index, inner_index, node.require.clone().unwrap());
+                match (&node.requires, &inner.provide) {
+                    (&Some(ref r), &Some(ref p)) => {
+                        if r.contains(&p) {
+                            graph.add_edge(node_index, inner_index, inner.provide.clone().unwrap());
+                        }
+                    }
+                    _ => continue,
                 }
             }
         }

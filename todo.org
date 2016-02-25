@@ -16,6 +16,9 @@
 ** TODO Reorganize queries to earliest possible stage
 ** TODO Prune unenecessary query nodes
 
+* Query Execution
+** TODO Select multiple columns
+
 * Execution Optimizer
 ** TODO Use time predicates to filter columns
 ** TODO Share time predicates between multiple query nodes
