@@ -1,0 +1,22 @@
+#+STARTUP: indent
+#+TITLE: Twin-Query TODO
+
+* Syntax
+** TODO Remove repeating 'w'
+** TODO Add new syntax for joins
+
+* Data Layout
+** TODO Sort columns by time
+
+* Query Validator
+** TODO Missing requires / provides
+** TODO Query node ordering
+
+* Query Optimizer
+** TODO Group operations on same stage
+** TODO Reorganize queries to earliest possible stage
+** TODO Prune unenecessary query nodes
+
+* Execution Optimizer
+** TODO Use time predicates to filter columns
+** TODO Share time predicates between multiple query nodes
