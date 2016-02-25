@@ -110,7 +110,6 @@ pub struct Plan {
     stages: Vec<HashSet<NodeIndex>>,
 }
 
-// TODO: Nodes in the same stage which act on the same ColumnName should be combined
 impl Plan {
     pub fn new(lines: Vec<QueryLine>) -> Plan {
         let graph = Self::build_graph(lines);
@@ -145,16 +144,17 @@ impl Plan {
                               })
                               .collect::<Vec<HashSet<usize>>>();
 
+        let stage_len = stage_types.len();
         for (index, types) in stage_types.iter().enumerate() {
             if types.len() > 1 {
                 return Err(Error::InvalidQueryNodeCombination);
             }
 
-            if index == 0 && types.contains(&2) {
+            if index == stage_len - 1 && types.contains(&2) {
                 return Err(Error::InvalidStageOrder);
             }
 
-            if index > 0 && types.contains(&1) {
+            if index < stage_len - 1 && types.contains(&1) {
                 return Err(Error::InvalidStageOrder);
             }
         }

@@ -9,7 +9,6 @@
 ** TODO Sort columns by time
 
 * Query Validator
-** TODO Missing requires / provides
 ** DONE Query node ordering
 
 * Query Optimizer
@@ -20,3 +19,4 @@
 * Execution Optimizer
 ** TODO Use time predicates to filter columns
 ** TODO Share time predicates between multiple query nodes
+** TODO Run query nodes on the same stage in parallel
