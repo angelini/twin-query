@@ -90,12 +90,20 @@ fn start_repl(path: &str) {
         linenoise::history_add(&query_raw);
 
         let query_lines = grammar::query(&query_raw);
-        // TODO: Validate query
 
         let plan = match query_lines {
-            Ok(lines) => Plan::new(lines),
+            Ok(lines) => {
+                let p = Plan::new(lines);
+                let valid = p.is_valid();
+
+                if valid.is_err() {
+                    println!("{:?}", valid);
+                    continue;
+                }
+                p
+            }
             Err(e) => {
-                println!("ERROR: {}", e);
+                println!("{}", e);
                 continue;
             }
         };

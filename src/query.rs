@@ -97,6 +97,14 @@ fn find_stage_index(stages: &[HashSet<NodeIndex>], node: &NodeIndex) -> Option<u
 }
 
 #[derive(Debug)]
+pub enum Error {
+    NoStages,
+    EmptyStages,
+    InvalidQueryNodeCombination,
+    InvalidStageOrder,
+}
+
+#[derive(Debug)]
 pub struct Plan {
     graph: Graph<PlanNode, ColumnName>,
     stages: Vec<HashSet<NodeIndex>>,
@@ -111,6 +119,47 @@ impl Plan {
             graph: graph,
             stages: stages,
         }
+    }
+
+    pub fn is_valid(&self) -> Result<(), Error> {
+        if self.stages.len() == 0 {
+            return Err(Error::NoStages);
+        }
+
+        if self.stages.iter().any(|s| s.len() == 0) {
+            return Err(Error::EmptyStages);
+        }
+
+        let stage_types = self.stages
+                              .iter()
+                              .map(|stage| {
+                                  let mut stage_types = HashSet::new();
+                                  for node_index in stage {
+                                      let plan_node = &self.graph[*node_index];
+                                      match plan_node.node {
+                                          QueryNode::Select(_) => stage_types.insert(1),
+                                          QueryNode::Where(_, _, _) => stage_types.insert(2),
+                                      };
+                                  }
+                                  stage_types
+                              })
+                              .collect::<Vec<HashSet<usize>>>();
+
+        for (index, types) in stage_types.iter().enumerate() {
+            if types.len() > 1 {
+                return Err(Error::InvalidQueryNodeCombination);
+            }
+
+            if index == 0 && types.contains(&2) {
+                return Err(Error::InvalidStageOrder);
+            }
+
+            if index > 0 && types.contains(&1) {
+                return Err(Error::InvalidStageOrder);
+            }
+        }
+
+        Ok(())
     }
 
     pub fn stage_nodes(&self) -> Vec<Vec<&QueryNode>> {

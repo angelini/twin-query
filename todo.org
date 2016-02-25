@@ -10,7 +10,7 @@
 
 * Query Validator
 ** TODO Missing requires / provides
-** TODO Query node ordering
+** DONE Query node ordering
 
 * Query Optimizer
 ** TODO Group operations on same stage
