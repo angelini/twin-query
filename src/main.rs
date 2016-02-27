@@ -15,134 +15,17 @@ extern crate rustc_serialize;
 extern crate toml;
 
 mod data;
-mod query;
 mod exec;
+mod query;
+mod repl;
 
 use clap::{App, SubCommand};
-use prettytable::Table;
-use prettytable::row::Row;
-use prettytable::cell::Cell;
-use prettytable::format;
-use rl_sys::readline;
-use rl_sys::history::{listmgmt, mgmt};
-use std::cmp;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 
-use data::{ColumnName, ColumnType, Db, Entries};
-use query::Plan;
-
-peg_file! grammar("grammar.rustpeg");
-
-fn read_query_raw() -> Option<String> {
-    let mut query = "".to_owned();
-
-    loop {
-        match readline::readline("") {
-            Ok(Some(ref line)) => {
-                if line == "" {
-                    let len = query.len();
-                    if len > 0 {
-                        query.truncate(len - 1);
-                    }
-                    return Some(query)
-                }
-                query = query + &line + "\n";
-            }
-            Ok(None) => return None,
-            _ => panic!("Cannot read line from console"),
-        }
-    }
-}
-
-fn print_table(cols: Vec<(&ColumnName, &Entries)>, limit: usize) {
-    let mut cols = cols;
-    cols.sort_by(|a, b| format!("{}", a.0).cmp(&format!("{}", b.0)));
-
-    let mut table = Table::new();
-    table.set_format(*format::consts::FORMAT_NO_LINESEP_WITH_TITLE);
-
-    let col_names = cols.iter()
-                        .map(|&(ref name, _)| Cell::new(&format!("{}", name)))
-                        .collect::<Vec<Cell>>();
-    table.set_titles(Row::new(col_names));
-
-    let max_col_len = cols.iter().fold(0, |acc, &(_, ref entries)| cmp::max(acc, entries.len()));
-
-    for i in 0..cmp::min(limit, max_col_len) {
-        let mut row = vec![];
-        for &(_, ref entries) in &cols {
-            let entry = entries.get(i).unwrap();
-            row.push(Cell::new(&format!("{}", entry)));
-        }
-        table.add_row(Row::new(row));
-    }
-
-    table.printstd();
-}
-
-
-fn start_repl(path: &str) {
-    mgmt::init();
-    let db = Db::from_file(path).expect("Cannot load db from file");
-
-    loop {
-        println!("\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
-        let query_raw = match read_query_raw() {
-            Some(q) => q,
-            None => {
-                mgmt::cleanup();
-                std::process::exit(0);
-            }
-        };
-
-        listmgmt::add(&query_raw).expect("Cannot save history");
-        println!("mgmt::get_state(): {:?}", mgmt::get_state());
-
-        let query_lines = grammar::query(&query_raw);
-        let plan = match query_lines {
-            Ok(lines) => {
-                let p = Plan::new(lines);
-                let valid = p.is_valid();
-
-                if valid.is_err() {
-                    println!("{}", p);
-                    println!("{:?}", valid);
-                    continue;
-                }
-                p
-            }
-            Err(e) => {
-                println!("{}", e);
-                continue;
-            }
-        };
-
-        println!("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n");
-        println!("{}", plan);
-
-        let names_and_entries = db.cols
-                                  .iter()
-                                  .map(|(name, col)| (name, &col.entries))
-                                  .collect::<Vec<(&ColumnName, &Entries)>>();
-        print_table(names_and_entries, 20);
-        println!("");
-
-        match exec::exec(&db, &plan) {
-            Ok(entries) => {
-                print_table(entries.iter()
-                                   .map(|&(ref n, ref e)| (n, e))
-                                   .collect(),
-                            20)
-            }
-            Err(e) => {
-                println!("{:?}", e);
-                continue;
-            }
-        };
-    }
-}
+use data::{ColumnName, ColumnType, Db};
+use repl::start_repl;
 
 #[derive(Debug, RustcEncodable, RustcDecodable)]
 struct Schema {
