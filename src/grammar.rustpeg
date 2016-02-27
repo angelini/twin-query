@@ -1,34 +1,33 @@
 use data::{ColumnName, Value};
-use query::{Comparator, Lhs, QueryLine, Rhs};
+use query::{Comparator, QueryLine};
 
 #[pub]
 query -> Vec<QueryLine>
-  = (select / where) ++ "\n"
+  = (select / join / where) ++ "\n"
 
 select -> QueryLine
   = __ "s " __ e:col_names __ { QueryLine::Select(e) }
 
+join -> QueryLine
+  = __ "j " l:string " in " r:col_name { QueryLine::Join(l, r) }
+
 where -> QueryLine
-  = __ "w " l:lhs "=" r:rhs  { QueryLine::Where(l, Comparator::Equal, r) }
-  / __ "w " l:lhs ">" r:rhs  { QueryLine::Where(l, Comparator::Greater, r) }
-  / __ "w " l:lhs "<" r:rhs  { QueryLine::Where(l, Comparator::Less, r) }
-  / __ "w " l:lhs ">=" r:rhs { QueryLine::Where(l, Comparator::GreaterOrEqual, r) }
-  / __ "w " l:lhs "<=" r:rhs { QueryLine::Where(l, Comparator::LessOrEqual, r) }
-
-lhs -> Lhs
-  = l:col_name { Lhs::Column(l) }
-
-rhs -> Rhs
-  = c:col_name { Rhs::Column(c) }
-  / __ i:int __ { Rhs::Constant(Value::Int(i)) }
-  / __ b:bool __ { Rhs::Constant(Value::Bool(b)) }
-  / __ "\"" s:string_with_whitespace "\"" __ { Rhs::Constant(Value::String(s)) }
+  = __ "w " l:col_name "=" r:value  { QueryLine::Where(l, Comparator::Equal, r) }
+  / __ "w " l:col_name ">" r:value  { QueryLine::Where(l, Comparator::Greater, r) }
+  / __ "w " l:col_name "<" r:value  { QueryLine::Where(l, Comparator::Less, r) }
+  / __ "w " l:col_name ">=" r:value { QueryLine::Where(l, Comparator::GreaterOrEqual, r) }
+  / __ "w " l:col_name "<=" r:value { QueryLine::Where(l, Comparator::LessOrEqual, r) }
 
 col_names -> Vec<ColumnName>
   = col_name ++ ","
 
 col_name -> ColumnName
   = __ t:string "." n:string __ { ColumnName::new(t, n) }
+
+value -> Value
+  = __ i:int __ { Value::Int(i) }
+  / __ b:bool __ { Value::Bool(b) }
+  / __ "\"" s:string_with_whitespace "\"" __ { Value::String(s) }
 
 int -> usize
   = [0-9]+ { match_str.parse::<usize>().unwrap() }

@@ -4,7 +4,6 @@ use petgraph::graph::NodeIndex;
 use std::cmp;
 use std::collections::HashSet;
 use std::fmt;
-use std::ops::Index;
 
 use data::{ColumnName, Value};
 
@@ -17,61 +16,50 @@ pub enum Comparator {
     LessOrEqual,
 }
 
-#[derive(Debug, Clone)]
-pub enum Lhs {
-    Column(ColumnName),
-}
-
-#[derive(Debug, Clone)]
-pub enum Rhs {
-    Column(ColumnName),
-    Constant(Value),
-}
-
 #[derive(Debug)]
 pub enum QueryLine {
     Select(Vec<ColumnName>),
-    Where(Lhs, Comparator, Rhs),
+    Join(String, ColumnName),
+    Where(ColumnName, Comparator, Value),
 }
 
 #[derive(Debug, Clone)]
 pub enum QueryNode {
     Select(ColumnName),
-    Where(Lhs, Vec<(Comparator, Rhs)>),
+    Join(ColumnName, ColumnName),
+    Where(ColumnName, Vec<(Comparator, Value)>),
 }
 
 #[derive(Debug, Clone)]
 struct PlanNode {
-    node: QueryNode,
+    query: QueryNode,
     requires: Option<HashSet<ColumnName>>,
     provide: Option<ColumnName>,
 }
 
 impl PlanNode {
     fn from_query_node(node: QueryNode) -> PlanNode {
+        let mut set = HashSet::new();
         let requires = match node {
             QueryNode::Select(ref name) => {
-                let mut set = HashSet::new();
                 set.insert(name.eid());
                 Some(set)
             }
-            QueryNode::Where(_, ref predicates) => {
-                Some(predicates.iter().fold(HashSet::new(), |mut acc, &(_, ref predicate)| {
-                    if let Rhs::Column(ref c) = *predicate {
-                        acc.insert(c.eid());
-                    }
-                    acc
-                }))
+            QueryNode::Join(ref left, _) => {
+                set.insert(left.eid());
+                Some(set)
             }
+            _ => None,
         };
 
         let provide = match node {
-            QueryNode::Where(Lhs::Column(ref left), _) => Some(left.eid()),
+            QueryNode::Join(_, ref right) => Some(right.eid()),
+            QueryNode::Where(ref left, _) => Some(left.eid()),
             _ => None,
         };
 
         PlanNode {
-            node: node,
+            query: node,
             requires: requires,
             provide: provide,
         }
@@ -80,7 +68,7 @@ impl PlanNode {
 
 impl fmt::Display for PlanNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.node)
+        write!(f, "{:?}", self.query)
     }
 }
 
@@ -93,6 +81,10 @@ fn parse_line(line: QueryLine) -> Vec<PlanNode> {
         }
         QueryLine::Where(left, comp, right) => {
             vec![PlanNode::from_query_node(QueryNode::Where(left, vec![(comp, right)]))]
+        }
+        QueryLine::Join(left, right) => {
+            let left_eid = ColumnName::new(left, "eid".to_owned());
+            vec![PlanNode::from_query_node(QueryNode::Join(left_eid, right))]
         }
     }
 }
@@ -110,7 +102,6 @@ fn find_stage_index(stages: &[HashSet<NodeIndex>], node: &NodeIndex) -> Option<u
 pub enum Error {
     NoStages,
     EmptyStages,
-    InvalidQueryNodeCombination,
     InvalidStageOrder,
 }
 
@@ -145,9 +136,10 @@ impl Plan {
                                   let mut stage_types = HashSet::new();
                                   for node_index in stage {
                                       let plan_node = &self.graph[*node_index];
-                                      match plan_node.node {
+                                      match plan_node.query {
                                           QueryNode::Select(_) => stage_types.insert(1),
-                                          QueryNode::Where(_, _) => stage_types.insert(2),
+                                          QueryNode::Join(_, _) => stage_types.insert(2),
+                                          QueryNode::Where(_, _) => stage_types.insert(3),
                                       };
                                   }
                                   stage_types
@@ -156,11 +148,7 @@ impl Plan {
 
         let stage_len = stage_types.len();
         for (index, types) in stage_types.iter().enumerate() {
-            if types.len() > 1 {
-                return Err(Error::InvalidQueryNodeCombination);
-            }
-
-            if index == stage_len - 1 && types.contains(&2) {
+            if index == stage_len - 1 && (types.contains(&2) || types.contains(&3)) {
                 return Err(Error::InvalidStageOrder);
             }
 
@@ -177,7 +165,7 @@ impl Plan {
             .iter()
             .map(|stage| {
                 stage.iter()
-                     .map(|node_index| &self.graph.index(node_index.to_owned()).node)
+                     .map(|node_index| &self.graph[node_index.to_owned()].query)
                      .collect()
             })
             .collect()
