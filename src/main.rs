@@ -8,9 +8,9 @@ extern crate bincode;
 extern crate clap;
 extern crate csv;
 extern crate flate2;
-extern crate linenoise;
 extern crate petgraph;
 extern crate prettytable;
+extern crate rl_sys;
 extern crate rustc_serialize;
 extern crate toml;
 
@@ -23,6 +23,8 @@ use prettytable::Table;
 use prettytable::row::Row;
 use prettytable::cell::Cell;
 use prettytable::format;
+use rl_sys::readline;
+use rl_sys::history::{listmgmt, mgmt};
 use std::cmp;
 use std::collections::HashMap;
 use std::fs::File;
@@ -33,19 +35,24 @@ use query::Plan;
 
 peg_file! grammar("grammar.rustpeg");
 
-fn read_query_raw() -> String {
+fn read_query_raw() -> Option<String> {
     let mut query = "".to_owned();
 
     loop {
-        let line = linenoise::input("").expect("Cannot read line from console");
-        if line == "" {
-            let len = query.len();
-            if len > 0 {
-                query.truncate(len - 1);
+        match readline::readline("") {
+            Ok(Some(ref line)) => {
+                if line == "" {
+                    let len = query.len();
+                    if len > 0 {
+                        query.truncate(len - 1);
+                    }
+                    return Some(query)
+                }
+                query = query + &line + "\n";
             }
-            return query;
+            Ok(None) => return None,
+            _ => panic!("Cannot read line from console"),
         }
-        query = query + &line + "\n";
     }
 }
 
@@ -77,20 +84,23 @@ fn print_table(cols: Vec<(&ColumnName, &Entries)>, limit: usize) {
 
 
 fn start_repl(path: &str) {
-    linenoise::history_set_max_len(1000);
-    linenoise::history_load(".history");
-
+    mgmt::init();
     let db = Db::from_file(path).expect("Cannot load db from file");
 
     loop {
         println!("\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
-        let query_raw = read_query_raw();
+        let query_raw = match read_query_raw() {
+            Some(q) => q,
+            None => {
+                mgmt::cleanup();
+                std::process::exit(0);
+            }
+        };
 
-        linenoise::history_save(".history");
-        linenoise::history_add(&query_raw);
+        listmgmt::add(&query_raw).expect("Cannot save history");
+        println!("mgmt::get_state(): {:?}", mgmt::get_state());
 
         let query_lines = grammar::query(&query_raw);
-
         let plan = match query_lines {
             Ok(lines) => {
                 let p = Plan::new(lines);
