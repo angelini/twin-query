@@ -122,7 +122,7 @@ pub fn exec(db: &Db, plan: &Plan) -> Result<Vec<(ColumnName, Entries)>, Error> {
         for &query_node in &stage_query_nodes[0] {
             match *query_node {
                 QueryNode::Select(ref name) => {
-                    let col = try!(db.cols.get(&name).ok_or(Error::MissingColumn(name.to_owned())));;
+                    let col = try!(db.cols.get(&name).ok_or(Error::MissingColumn(name.to_owned())));
                     result.push((name.to_owned(), col.entries.clone()))
                 }
                 _ => panic!("Invalid query state, should only be selects"),
