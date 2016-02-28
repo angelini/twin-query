@@ -163,29 +163,15 @@ impl Plan {
             return Err(Error::EmptyStages);
         }
 
-        let stage_types = self.stages
-                              .iter()
-                              .map(|stage| {
-                                  let mut stage_types = HashSet::new();
-                                  for node_index in stage {
-                                      let plan_node = &self.graph[*node_index];
-                                      match plan_node.query {
-                                          QueryNode::Select(_) => stage_types.insert(1),
-                                          QueryNode::Join(_, _) => stage_types.insert(2),
-                                          QueryNode::Where(_, _) => stage_types.insert(3),
-                                      };
-                                  }
-                                  stage_types
-                              })
-                              .collect::<Vec<HashSet<usize>>>();
+        let stage_query_types = self.stage_query_types();
+        let stages_len = stage_query_types.len();
 
-        let stage_len = stage_types.len();
-        for (index, types) in stage_types.iter().enumerate() {
-            if index == stage_len - 1 && (types.contains(&2) || types.contains(&3)) {
+        for (index, types) in stage_query_types.iter().enumerate() {
+            if index == stages_len - 1 && (types.contains(&2) || types.contains(&3)) {
                 return Err(Error::InvalidStageOrder);
             }
 
-            if index < stage_len - 1 && types.contains(&1) {
+            if index < stages_len - 1 && types.contains(&1) {
                 return Err(Error::InvalidStageOrder);
             }
         }
@@ -193,13 +179,31 @@ impl Plan {
         Ok(())
     }
 
-    pub fn stage_nodes(&self) -> Vec<Vec<&QueryNode>> {
+    pub fn stage_query_nodes(&self) -> Vec<Vec<&QueryNode>> {
         self.stages
             .iter()
             .map(|stage| {
                 stage.iter()
                      .map(|node_index| &self.graph[node_index.to_owned()].query)
                      .collect()
+            })
+            .collect()
+    }
+
+    fn stage_query_types(&self) -> Vec<HashSet<usize>> {
+        self.stages
+            .iter()
+            .map(|stage| {
+                let mut stage_types = HashSet::new();
+                for node_index in stage {
+                    let plan_node = &self.graph[*node_index];
+                    match plan_node.query {
+                        QueryNode::Select(_) => stage_types.insert(1),
+                        QueryNode::Join(_, _) => stage_types.insert(2),
+                        QueryNode::Where(_, _) => stage_types.insert(3),
+                    };
+                }
+                stage_types
             })
             .collect()
     }

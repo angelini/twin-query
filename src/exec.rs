@@ -116,11 +116,11 @@ pub fn exec(db: &Db, plan: &Plan) -> Result<Vec<(ColumnName, Entries)>, Error> {
     let mut cache = Cache::new();
     let mut result = vec![];
 
-    let stage_nodes = plan.stage_nodes();
+    let stage_query_nodes = plan.stage_query_nodes();
 
     // TODO: Remove special case
-    if stage_nodes.len() == 1 {
-        for &query_node in &stage_nodes[0] {
+    if stage_query_nodes.len() == 1 {
+        for &query_node in &stage_query_nodes[0] {
             match *query_node {
                 QueryNode::Select(ref name) => {
                     let col = try!(db.cols.get(&name).ok_or(Error::MissingColumn(name.to_owned())));;
@@ -133,8 +133,8 @@ pub fn exec(db: &Db, plan: &Plan) -> Result<Vec<(ColumnName, Entries)>, Error> {
         return Ok(result);
     }
 
-    for stage in &stage_nodes {
-        for query_node in stage {
+    for query_nodes in &stage_query_nodes {
+        for query_node in query_nodes {
             let (name, filtered) = try!(find_entries(db, &cache, query_node));
 
             match filtered {
