@@ -115,10 +115,14 @@ impl Plan {
     pub fn new(lines: Vec<QueryLine>) -> Plan {
         let graph = Self::build_graph(lines);
         let stages = Self::build_stages(&graph);
-        Plan {
+        let mut plan = Plan {
             graph: graph,
             stages: stages,
-        }
+        };
+
+        plan.group_similar_nodes();
+
+        plan
     }
 
     pub fn is_valid(&self) -> Result<(), Error> {
@@ -169,6 +173,80 @@ impl Plan {
                      .collect()
             })
             .collect()
+    }
+
+    fn group_similar_nodes(&mut self) {
+        let mut new_stages: Vec<HashSet<NodeIndex>> = vec![];
+        for stage in &self.stages {
+            let mut new_stage = stage.clone();
+            let groups = self.find_similar_nodes_in_stage(stage);
+            println!("groups: {:?}", groups);
+
+            for (node_indices, predicates) in groups {
+                let node_indices_list = node_indices.into_iter().collect::<Vec<NodeIndex>>();
+                let mut first = &mut self.graph[node_indices_list[0]];
+
+                match first.query {
+                    QueryNode::Where(_, ref mut preds) => {
+                        preds = predicates;
+                    },
+                    _ => panic!()
+                }
+
+                // for other in group_list[1..].iter() {
+                //     match (&mut first.query, &self.graph[other.to_owned()].query) {
+                //         (&mut QueryNode::Where(_, ref mut predicates),
+                //          &QueryNode::Where(_, ref preds)) => {}
+                //         _ => panic!(),
+                //     }
+                // }
+            }
+        }
+    }
+
+    fn find_similar_nodes_in_stage(&self, stage: &HashSet<NodeIndex>) -> Vec<(HashSet<NodeIndex>, Vec<(Comparator, Value)>)> {
+        let mut similar = vec![];
+        let mut already_matched = HashSet::new();
+
+        for &node_index in stage.iter() {
+            if already_matched.contains(&node_index) {
+                continue;
+            };
+
+            let mut set = HashSet::new();
+            let mut predicates = vec![];
+            set.insert(node_index);
+
+            for &inner_index in stage.iter() {
+                if node_index == inner_index {
+                    continue;
+                }
+
+                let inner = &self.graph[inner_index];
+                let node = &self.graph[node_index];
+
+                match (&node.query, &inner.query) {
+                    (&QueryNode::Where(ref node_left, ref node_preds),
+                     &QueryNode::Where(ref inner_left, ref inner_preds)) => {
+                        if node_left == inner_left {
+                            set.insert(inner_index);
+                            if predicates.len() == 0 {
+                                predicates.append(&mut node_preds.clone());
+                            }
+                            predicates.append(&mut inner_preds.clone());
+                            already_matched.insert(inner_index);
+                        }
+                    }
+                    _ => continue,
+                }
+            }
+
+            if set.len() > 1 {
+                similar.push((set, predicates))
+            }
+        }
+
+        similar
     }
 
     fn build_graph(lines: Vec<QueryLine>) -> Graph<PlanNode, ColumnName> {
