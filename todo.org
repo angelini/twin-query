@@ -2,7 +2,7 @@
 #+TITLE: Twin-Query TODO
 
 * Syntax
-** TODO Remove repeating 'w'
+** DONE Remove repeating 'w' and 'j'
 ** DONE Add new syntax for joins
 
 * Data Layout

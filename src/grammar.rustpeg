@@ -9,14 +9,14 @@ select -> QueryLine
   = __ "s " __ e:col_names __ { QueryLine::Select(e) }
 
 join -> QueryLine
-  = __ "j " l:string " in " r:col_name { QueryLine::Join(l, r) }
+  = __ "j "? l:string " in " r:col_name { QueryLine::Join(l, r) }
 
 where -> QueryLine
-  = __ "w " l:col_name "=" r:value  { QueryLine::Where(l, Comparator::Equal, r) }
-  / __ "w " l:col_name ">" r:value  { QueryLine::Where(l, Comparator::Greater, r) }
-  / __ "w " l:col_name "<" r:value  { QueryLine::Where(l, Comparator::Less, r) }
-  / __ "w " l:col_name ">=" r:value { QueryLine::Where(l, Comparator::GreaterOrEqual, r) }
-  / __ "w " l:col_name "<=" r:value { QueryLine::Where(l, Comparator::LessOrEqual, r) }
+  = __ "w "? l:col_name "=" r:value  { QueryLine::Where(l, Comparator::Equal, r) }
+  / __ "w "? l:col_name ">" r:value  { QueryLine::Where(l, Comparator::Greater, r) }
+  / __ "w "? l:col_name "<" r:value  { QueryLine::Where(l, Comparator::Less, r) }
+  / __ "w "? l:col_name ">=" r:value { QueryLine::Where(l, Comparator::GreaterOrEqual, r) }
+  / __ "w "? l:col_name "<=" r:value { QueryLine::Where(l, Comparator::LessOrEqual, r) }
 
 col_names -> Vec<ColumnName>
   = col_name ++ ","
