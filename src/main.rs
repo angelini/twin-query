@@ -80,6 +80,7 @@ fn add_to_db(file_path: &str, schema_path: &str, csv_path: &str) {
         }
     }
 
+    db.sort_columns();
     db.write(file_path).expect("Could not write db to disk");
 }
 

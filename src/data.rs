@@ -4,6 +4,7 @@ use bincode::rustc_serialize as serialize;
 use flate2::write::ZlibEncoder;
 use flate2::read::ZlibDecoder;
 use flate2::Compression;
+use std::cmp;
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
@@ -145,6 +146,18 @@ impl Entries {
             Entries::String(ref entries) => entries.len(),
         }
     }
+
+    fn sort(&mut self) {
+        fn sort_by_time<T>(a: &Entry<T>, b: &Entry<T>) -> cmp::Ordering {
+            a.time.cmp(&b.time)
+        };
+
+        match *self {
+            Entries::Bool(ref mut entries) => entries.sort_by(sort_by_time),
+            Entries::Int(ref mut entries) => entries.sort_by(sort_by_time),
+            Entries::String(ref mut entries) => entries.sort_by(sort_by_time),
+        };
+    }
 }
 
 #[derive(Debug, RustcEncodable, RustcDecodable)]
@@ -164,6 +177,10 @@ impl Column {
             name: name,
             entries: entries,
         }
+    }
+
+    fn sort(&mut self) {
+        self.entries.sort()
     }
 }
 
@@ -253,6 +270,12 @@ impl Db {
             Entries::String(ref mut entries) => entries.push(Entry::new(eid, value, time)),
         };
         Ok(())
+    }
+
+    pub fn sort_columns(&mut self) {
+        for (_, col) in &mut self.cols {
+            col.sort()
+        }
     }
 }
 

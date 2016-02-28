@@ -25,9 +25,9 @@ fn read_query_raw() -> String {
                     if len > 0 {
                         query.truncate(len - 1);
                     }
-                    return query
+                    return query;
                 } else if line == "exit" {
-                    return line.to_owned()
+                    return line.to_owned();
                 }
                 query = query + &line + "\n";
             }
@@ -82,7 +82,6 @@ pub fn start_repl(path: &str) {
         };
 
         listmgmt::add(&query_raw).expect("Cannot save history");
-        println!("mgmt::get_state(): {:?}", mgmt::get_state());
 
         let query_lines = grammar::query(&query_raw);
         let plan = match query_lines {
