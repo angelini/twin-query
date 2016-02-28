@@ -16,6 +16,18 @@ pub enum Comparator {
     LessOrEqual,
 }
 
+impl Comparator {
+    fn test(&self, left: &Value, right: &Value) -> bool {
+        match *self {
+            Comparator::Equal => left == right,
+            Comparator::Greater => left > right,
+            Comparator::GreaterOrEqual => left >= right,
+            Comparator::Less => left < right,
+            Comparator::LessOrEqual => left <= right,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum QueryLine {
     Select(Vec<ColumnName>),
@@ -24,10 +36,38 @@ pub enum QueryLine {
 }
 
 #[derive(Debug, Clone)]
+pub struct Predicate {
+    comparator: Comparator,
+    value: Value,
+}
+
+#[derive(Debug, Clone)]
+pub struct Predicates {
+    list: Vec<Predicate>,
+}
+
+impl Predicates {
+    fn new(comp: Comparator, val: Value) -> Predicates {
+        Predicates {
+            list: vec![Predicate {
+                           comparator: comp,
+                           value: val,
+                       }],
+        }
+    }
+
+    pub fn test(&self, left: &Value) -> bool {
+        self.list.iter().fold(true, |acc, predicate| {
+            acc && predicate.comparator.test(left, &predicate.value)
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum QueryNode {
     Select(ColumnName),
     Join(ColumnName, ColumnName),
-    Where(ColumnName, Vec<(Comparator, Value)>),
+    Where(ColumnName, Predicates),
 }
 
 #[derive(Debug, Clone)]
@@ -80,7 +120,7 @@ fn parse_line(line: QueryLine) -> Vec<PlanNode> {
                 .collect()
         }
         QueryLine::Where(left, comp, right) => {
-            vec![PlanNode::from_query_node(QueryNode::Where(left, vec![(comp, right)]))]
+            vec![PlanNode::from_query_node(QueryNode::Where(left, Predicates::new(comp, right)))]
         }
         QueryLine::Join(left, right) => {
             let left_eid = ColumnName::new(left, "eid".to_owned());
@@ -89,14 +129,7 @@ fn parse_line(line: QueryLine) -> Vec<PlanNode> {
     }
 }
 
-fn find_stage_index(stages: &[HashSet<NodeIndex>], node: &NodeIndex) -> Option<usize> {
-    for (idx, stage) in stages.iter().enumerate() {
-        if stage.contains(node) {
-            return Some(idx);
-        }
-    }
-    None
-}
+type NodeIndices = HashSet<NodeIndex>;
 
 #[derive(Debug)]
 pub enum Error {
@@ -108,7 +141,7 @@ pub enum Error {
 #[derive(Debug)]
 pub struct Plan {
     graph: Graph<PlanNode, ColumnName>,
-    stages: Vec<HashSet<NodeIndex>>,
+    stages: Vec<NodeIndices>,
 }
 
 impl Plan {
@@ -195,7 +228,7 @@ impl Plan {
         graph
     }
 
-    fn build_stages(graph: &Graph<PlanNode, ColumnName>) -> Vec<HashSet<NodeIndex>> {
+    fn build_stages(graph: &Graph<PlanNode, ColumnName>) -> Vec<NodeIndices> {
         let mut stages = vec![];
 
         for external in graph.externals(EdgeDirection::Incoming) {
@@ -205,7 +238,7 @@ impl Plan {
                 let provides = graph.neighbors_directed(node, EdgeDirection::Incoming);
 
                 for provide in provides {
-                    match find_stage_index(&stages, &provide) {
+                    match Self::find_stage_index(&stages, &provide) {
                         Some(stage_index) => max_depth = cmp::max(max_depth, stage_index as isize),
                         _ => continue,
                     }
@@ -222,6 +255,16 @@ impl Plan {
 
         stages.reverse();
         stages
+    }
+
+
+    fn find_stage_index(stages: &[NodeIndices], node: &NodeIndex) -> Option<usize> {
+        for (idx, stage) in stages.iter().enumerate() {
+            if stage.contains(node) {
+                return Some(idx);
+            }
+        }
+        None
     }
 }
 

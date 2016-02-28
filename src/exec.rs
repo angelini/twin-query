@@ -1,5 +1,5 @@
 use data::{ColumnName, Db, Entries, Entry, Value};
-use query::{Comparator, Plan, QueryNode};
+use query::{Plan, Predicates, QueryNode};
 use std::collections::{HashMap, HashSet};
 
 type Eids = HashSet<usize>;
@@ -18,41 +18,27 @@ pub enum Error {
     InvalidJoinColumn(ColumnName),
 }
 
-fn compare(left: &Value, predicates: &[(Comparator, Value)]) -> bool {
-    predicates.iter().fold(true, |acc, predicate| {
-        let v = &predicate.1;
-        acc &&
-        match predicate.0 {
-            Comparator::Equal => left == v,
-            Comparator::Greater => left > v,
-            Comparator::GreaterOrEqual => left >= v,
-            Comparator::Less => left < v,
-            Comparator::LessOrEqual => left <= v,
-        }
-    })
-}
-
-fn match_by_predicates(entries: &Entries, predicates: &[(Comparator, Value)]) -> Eids {
+fn match_by_predicates(entries: &Entries, predicates: &Predicates) -> Eids {
     let mut eids = Eids::new();
 
     match *entries {
         Entries::Bool(ref entries) => {
             for entry in entries {
-                if compare(&Value::Bool(entry.value), predicates) {
+                if predicates.test(&Value::Bool(entry.value)) {
                     eids.insert(entry.eid);
                 }
             }
         }
         Entries::Int(ref entries) => {
             for entry in entries {
-                if compare(&Value::Int(entry.value), predicates) {
+                if predicates.test(&Value::Int(entry.value)) {
                     eids.insert(entry.eid);
                 }
             }
         }
         Entries::String(ref entries) => {
             for entry in entries {
-                if compare(&Value::String(entry.value.to_owned()), predicates) {
+                if predicates.test(&Value::String(entry.value.to_owned())) {
                     eids.insert(entry.eid);
                 }
             }
