@@ -1,11 +1,11 @@
 use bincode;
-use bincode::SizeLimit;
 use bincode::rustc_serialize as serialize;
+use bincode::SizeLimit;
 use flate2::write::ZlibEncoder;
 use flate2::read::ZlibDecoder;
 use flate2::Compression;
 use std::cmp;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs::File;
 use std::io;
@@ -160,10 +160,23 @@ impl Entries {
     }
 }
 
+#[derive(Debug)]
+pub enum Error {
+    Io(io::Error),
+    Encoding(serialize::EncodingError),
+    Decoding(serialize::DecodingError),
+    NameAlreadyTake(ColumnName),
+    NameNotFound(ColumnName),
+    ParseError(ColumnName, ColumnType),
+}
+
+pub type Eids = HashSet<usize>;
+
 #[derive(Debug, RustcEncodable, RustcDecodable)]
 pub struct Column {
     pub name: ColumnName,
     pub entries: Entries,
+    pub eids: Eids,
 }
 
 impl Column {
@@ -176,22 +189,34 @@ impl Column {
         Column {
             name: name,
             entries: entries,
+            eids: HashSet::new(),
         }
     }
 
     fn sort(&mut self) {
         self.entries.sort()
     }
-}
 
-#[derive(Debug)]
-pub enum Error {
-    Io(io::Error),
-    Encoding(serialize::EncodingError),
-    Decoding(serialize::DecodingError),
-    NameAlreadyTake(ColumnName),
-    NameNotFound(ColumnName),
-    ParseError(ColumnName, ColumnType),
+    fn add_entry(&mut self, eid: usize, value: String, time: usize) -> Result<(), Error> {
+        match self.entries {
+            Entries::Bool(ref mut entries) => {
+                match value.parse::<bool>() {
+                    Ok(v) => entries.push(Entry::new(eid, v, time)),
+                    Err(_) => return Err(Error::ParseError(self.name.clone(), ColumnType::Bool)),
+                }
+            }
+            Entries::Int(ref mut entries) => {
+                match value.parse::<usize>() {
+                    Ok(v) => entries.push(Entry::new(eid, v, time)),
+                    _ => return Err(Error::ParseError(self.name.clone(), ColumnType::Int)),
+                }
+            }
+            Entries::String(ref mut entries) => entries.push(Entry::new(eid, value, time)),
+        };
+
+        self.eids.insert(eid);
+        Ok(())
+    }
 }
 
 #[derive(Debug, RustcEncodable, RustcDecodable)]
@@ -253,23 +278,7 @@ impl Db {
             Some(c) => c,
             None => return Err(Error::NameNotFound(name.to_owned())),
         };
-
-        match col.entries {
-            Entries::Bool(ref mut entries) => {
-                match value.parse::<bool>() {
-                    Ok(v) => entries.push(Entry::new(eid, v, time)),
-                    Err(_) => return Err(Error::ParseError(name.to_owned(), ColumnType::Bool)),
-                }
-            }
-            Entries::Int(ref mut entries) => {
-                match value.parse::<usize>() {
-                    Ok(v) => entries.push(Entry::new(eid, v, time)),
-                    _ => return Err(Error::ParseError(name.to_owned(), ColumnType::Int)),
-                }
-            }
-            Entries::String(ref mut entries) => entries.push(Entry::new(eid, value, time)),
-        };
-        Ok(())
+        col.add_entry(eid, value, time)
     }
 
     pub fn sort_columns(&mut self) {

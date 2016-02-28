@@ -1,8 +1,7 @@
-use data::{ColumnName, Db, Entries, Entry, Value};
-use query::{Plan, Predicates, QueryNode};
 use std::collections::{HashMap, HashSet};
 
-type Eids = HashSet<usize>;
+use data::{ColumnName, Db, Eids, Entries, Entry, Value};
+use query::{Plan, Predicates, QueryNode};
 
 type Cache = HashMap<ColumnName, Eids>;
 

@@ -24,3 +24,6 @@
 ** TODO Use time predicates to filter columns
 ** TODO Share time predicates between multiple query nodes
 ** TODO Run query nodes on the same stage in parallel
+
+* Result Set
+** TODO Return only latest value of each entity
