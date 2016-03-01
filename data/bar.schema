@@ -1,0 +1,9 @@
+table = "bar"
+time_column = "a"
+csv_ordering = ["a", "b", "c", "foo"]
+
+[columns]
+a = "Int"
+b = "Bool"
+c = "String"
+foo = "Int"

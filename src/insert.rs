@@ -16,6 +16,7 @@ struct RawSchema {
 
 #[derive(Debug)]
 struct Schema {
+    table: String,
     columns: HashMap<ColumnName, ColumnType>,
     time_column: ColumnName,
     csv_ordering: Vec<ColumnName>,
@@ -24,6 +25,7 @@ struct Schema {
 impl Schema {
     fn new(raw: RawSchema) -> Schema {
         Schema {
+            table: raw.table.to_owned(),
             columns: Self::column_names_and_types(&raw.table, raw.columns),
             time_column: ColumnName::new(raw.table.to_owned(), raw.time_column),
             csv_ordering: Self::ordering(&raw.table, raw.csv_ordering),
@@ -84,7 +86,7 @@ pub fn add_to_db(file_path: &str, schema_path: &str, csv_path: &str) {
 
     let mut count = 0;
     for row in rdr.records().map(|r| r.unwrap()) {
-        let eid = db.next_eid();
+        let eid = db.next_eid(&schema.table);
         let time = row.get(time_index).unwrap().parse::<usize>().unwrap();
 
         for (name, value) in schema.csv_ordering.iter().zip(row.iter()) {

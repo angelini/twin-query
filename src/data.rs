@@ -176,7 +176,6 @@ pub type Eids = HashSet<usize>;
 pub struct Column {
     pub name: ColumnName,
     pub entries: Entries,
-    pub eids: Eids,
 }
 
 impl Column {
@@ -189,7 +188,6 @@ impl Column {
         Column {
             name: name,
             entries: entries,
-            eids: HashSet::new(),
         }
     }
 
@@ -213,8 +211,6 @@ impl Column {
             }
             Entries::String(ref mut entries) => entries.push(Entry::new(eid, value, time)),
         };
-
-        self.eids.insert(eid);
         Ok(())
     }
 }
@@ -222,6 +218,7 @@ impl Column {
 #[derive(Debug, RustcEncodable, RustcDecodable)]
 pub struct Db {
     pub cols: HashMap<ColumnName, Column>,
+    pub eids: HashMap<String, Eids>,
     entity_count: usize,
 }
 
@@ -229,6 +226,7 @@ impl Db {
     fn new() -> Db {
         Db {
             cols: HashMap::new(),
+            eids: HashMap::new(),
             entity_count: 0,
         }
     }
@@ -256,9 +254,13 @@ impl Db {
         Ok(())
     }
 
-    pub fn next_eid(&mut self) -> usize {
+    pub fn next_eid(&mut self, table: &str) -> usize {
+        let eids = self.eids.get_mut(table).expect(&format!("Cannot find table {}", table));
         let next = self.entity_count;
+
         self.entity_count += 1;
+        eids.insert(next);
+
         next
     }
 
@@ -266,7 +268,8 @@ impl Db {
         match self.cols.get(&name) {
             Some(_) => Err(Error::NameAlreadyTake(name)),
             None => {
-                self.cols.insert(name.clone(), Column::new(name, t));
+                self.cols.insert(name.clone(), Column::new(name.clone(), t));
+                self.eids.insert(name.table, Eids::new());
                 Ok(())
             }
         }

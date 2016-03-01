@@ -3,7 +3,36 @@ use std::collections::{HashMap, HashSet};
 use data::{ColumnName, Db, Eids, Entries, Entry, Value};
 use query::{Plan, Predicates, QueryNode};
 
-type Cache = HashMap<ColumnName, Eids>;
+struct Cache<'a> {
+    db: &'a Db,
+    map: HashMap<ColumnName, Eids>,
+}
+
+impl<'a> Cache<'a> {
+    fn new(db: &Db) -> Cache {
+        Cache {
+            db: db,
+            map: HashMap::new(),
+        }
+    }
+
+    fn get(&self, name: &ColumnName) -> Option<&Eids> {
+        self.map.get(name).or_else(|| {
+            match self.db.eids.get(&name.table) {
+                Some(eids) => Some(eids),
+                None => None,
+            }
+        })
+    }
+
+    fn insert_or_merge(&mut self, name: ColumnName, eids: Eids) {
+        if let Some(set) = self.map.get_mut(&name) {
+            set.extend(eids);
+            return;
+        }
+        self.map.insert(name, eids);
+    }
+}
 
 #[derive(Debug)]
 enum Filtered {
@@ -103,41 +132,18 @@ fn find_entries(db: &Db, cache: &Cache, node: &QueryNode) -> Result<(ColumnName,
     }
 }
 
-fn insert_or_merge(cache: &mut Cache, name: ColumnName, eids: Eids) {
-    let set = match cache.get(&name) {
-        Some(set) => eids.intersection(set).cloned().collect(),
-        None => eids,
-    };
-    cache.insert(name, set);
-}
-
 pub fn exec(db: &Db, plan: &Plan) -> Result<Vec<(ColumnName, Entries)>, Error> {
-    let mut cache = Cache::new();
+    let mut cache = Cache::new(db);
     let mut result = vec![];
 
     let stage_query_nodes = plan.stage_query_nodes();
-
-    // TODO: Remove special case
-    if stage_query_nodes.len() == 1 {
-        for &query_node in &stage_query_nodes[0] {
-            match *query_node {
-                QueryNode::Select(ref name) => {
-                    let col = try!(db.cols.get(&name).ok_or(Error::MissingColumn(name.to_owned())));
-                    result.push((name.to_owned(), col.entries.clone()))
-                }
-                _ => panic!("Invalid query state, should only be selects"),
-            }
-        }
-
-        return Ok(result);
-    }
 
     for query_nodes in &stage_query_nodes {
         for query_node in query_nodes {
             let (name, filtered) = try!(find_entries(db, &cache, query_node));
 
             match filtered {
-                Filtered::Eids(eids) => insert_or_merge(&mut cache, name, eids),
+                Filtered::Eids(eids) => cache.insert_or_merge(name, eids),
                 Filtered::Entries(entries) => result.push((name, entries)),
             }
         }

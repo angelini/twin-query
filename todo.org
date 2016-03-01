@@ -17,7 +17,7 @@
 ** TODO Prune unenecessary query nodes
 
 * Query Execution
-** TODO Use column eids as roots of query cache
+** DONE Use column eids as roots of query cache
 ** TODO Filter by eid
 
 * Execution Optimizer
