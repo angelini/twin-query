@@ -7,6 +7,7 @@ use rl_sys::history::{listmgmt, mgmt, histfile};
 use std::cmp;
 use std::path::Path;
 use std::process;
+use time;
 
 use data::{ColumnName, Db, Entries};
 use exec;
@@ -63,8 +64,10 @@ fn print_table(cols: Vec<(&ColumnName, &Entries)>, limit: usize) {
 }
 
 pub fn start_repl(path: &str) {
-    let db = Db::from_file(path).expect("Cannot load db from file");
     let history_path = Path::new("./.history");
+    let mut start = time::precise_time_s();
+    let db = Db::from_file(path).expect("Cannot load db from file");
+    println!("load time: {:?}", time::precise_time_s() - start);
 
     mgmt::init();
     if history_path.exists() {
@@ -83,6 +86,7 @@ pub fn start_repl(path: &str) {
 
         listmgmt::add(&query_raw).expect("Cannot save history");
 
+        start = time::precise_time_s();
         let query_lines = grammar::query(&query_raw);
         let plan = match query_lines {
             Ok(lines) => {
@@ -103,6 +107,7 @@ pub fn start_repl(path: &str) {
         };
 
         println!("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n");
+        println!("query parse time: {:?}", time::precise_time_s() - start);
         println!("{}", plan);
 
         let names_and_entries = db.cols
@@ -112,8 +117,10 @@ pub fn start_repl(path: &str) {
         print_table(names_and_entries, 20);
         println!("");
 
+        start = time::precise_time_s();
         match exec::exec(&db, &plan) {
             Ok(entries) => {
+                println!("exec time: {:?}", time::precise_time_s() - start);
                 print_table(entries.iter()
                                    .map(|&(ref n, ref e)| (n, e))
                                    .collect(),

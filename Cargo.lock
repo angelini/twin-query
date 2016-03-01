@@ -12,6 +12,7 @@ dependencies = [
  "prettytable-rs 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rl-sys 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.16 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.34 (registry+https://github.com/rust-lang/crates.io-index)",
  "toml 0.1.27 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

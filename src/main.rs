@@ -12,6 +12,7 @@ extern crate petgraph;
 extern crate prettytable;
 extern crate rl_sys;
 extern crate rustc_serialize;
+extern crate time;
 extern crate toml;
 
 mod data;
