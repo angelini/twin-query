@@ -26,11 +26,11 @@ impl<'a> Cache<'a> {
     }
 
     fn insert_or_merge(&mut self, name: ColumnName, eids: Eids) {
-        if let Some(set) = self.map.get_mut(&name) {
-            set.extend(eids);
-            return;
-        }
-        self.map.insert(name, eids);
+        let merged = match self.map.get(&name) {
+            Some(set) => eids.intersection(set).cloned().collect(),
+            None => eids
+        };
+        self.map.insert(name, merged);
     }
 }
 
