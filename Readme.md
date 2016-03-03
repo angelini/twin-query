@@ -22,6 +22,7 @@ Queries have the following form
 s <table.column>[, <table.column>]      # select
 j <table> in <table.column>             # join
 w <table.column> <operator> <constant>  # where
+l <size>                                # limit
 ```
 
 Add entries to a new Db from multiple CSV files
