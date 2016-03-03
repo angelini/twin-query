@@ -13,13 +13,12 @@
 ** DONE Query node ordering
 
 * Query Optimizer
-** TODO Group operations on same stage
-** TODO Reorganize queries to earliest possible stage
 ** TODO Prune unenecessary query nodes
+** DONE Group operations on same stage
 
 * Query Execution
-** DONE Use column eids as roots of query cache
 ** TODO Filter by eid
+** DONE Use column eids as roots of query cache
 
 * Execution Optimizer
 ** TODO Use time predicates to filter columns

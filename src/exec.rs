@@ -9,7 +9,7 @@ struct Cache<'a> {
 }
 
 impl<'a> Cache<'a> {
-    fn new(db: &Db) -> Cache {
+    fn new(db: &'a Db) -> Self {
         Cache {
             db: db,
             map: HashMap::new(),
@@ -43,7 +43,7 @@ enum Filtered {
 #[derive(Debug)]
 pub enum Error {
     MissingColumn(ColumnName),
-    InvalidJoinColumn(ColumnName),
+    InvalidJoin(ColumnName),
 }
 
 fn match_by_predicates(entries: &Entries, predicates: &Predicates) -> Eids {
@@ -119,7 +119,7 @@ fn find_entries(db: &Db, cache: &Cache, node: &QueryNode) -> Result<(ColumnName,
                 Entries::Int(ref entries) => {
                     Ok((right.eid(), Filtered::Eids(match_by_eids(entries, eids))))
                 }
-                _ => Err(Error::InvalidJoinColumn(right.to_owned())),
+                _ => Err(Error::InvalidJoin(right.to_owned())),
             }
         }
         QueryNode::Where(ref left, ref predicates) => {

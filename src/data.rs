@@ -284,6 +284,7 @@ impl Db {
         col.add_entry(eid, value, time)
     }
 
+    #[allow(for_kv_map)]
     pub fn sort_columns(&mut self) {
         for (_, col) in &mut self.cols {
             col.sort()

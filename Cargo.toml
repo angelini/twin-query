@@ -5,11 +5,11 @@ authors = ["Alex Angelini <alex.louis.angelini@gmail.com>"]
 
 [dependencies]
 bincode = "0.4"
-clap = "2.0"
-clippy = "*"
+clap = "2.1.2"
+clippy = "0.0.44"
 csv = "0.14"
 flate2 = "0.2"
-peg = "0.3"
+peg = "0.3.10"
 petgraph = "0.2"
 prettytable-rs = "0.6"
 rl-sys = "0.4.1"

@@ -47,6 +47,12 @@ pub struct Predicates {
 }
 
 impl Predicates {
+    pub fn test(&self, left: &Value) -> bool {
+        self.list.iter().fold(true, |acc, predicate| {
+            acc && predicate.comparator.test(left, &predicate.value)
+        })
+    }
+
     fn new(comp: Comparator, val: Value) -> Predicates {
         Predicates {
             list: vec![Predicate {
@@ -56,10 +62,16 @@ impl Predicates {
         }
     }
 
-    pub fn test(&self, left: &Value) -> bool {
-        self.list.iter().fold(true, |acc, predicate| {
-            acc && predicate.comparator.test(left, &predicate.value)
-        })
+    fn add(&mut self, predicate: Predicate) {
+        self.list.push(predicate)
+    }
+}
+
+impl Extend<Predicate> for Predicates {
+    fn extend<T: IntoIterator<Item = Predicate>>(&mut self, iterable: T) {
+        for elem in iterable {
+            self.add(elem);
+        }
     }
 }
 
@@ -148,10 +160,13 @@ impl Plan {
     pub fn new(lines: Vec<QueryLine>) -> Plan {
         let graph = Self::build_graph(lines);
         let stages = Self::build_stages(&graph);
-        Plan {
+        let mut plan = Plan {
             graph: graph,
             stages: stages,
-        }
+        };
+
+        plan.optimize();
+        plan
     }
 
     pub fn is_valid(&self) -> Result<(), Error> {
@@ -188,6 +203,68 @@ impl Plan {
                      .collect()
             })
             .collect()
+    }
+
+    fn optimize(&mut self) {
+        let mut remove_indices = HashSet::new();
+
+        for stage in &mut self.stages {
+            let groups = Self::group_nodes(&self.graph, stage);
+
+            for (node_index, col_name, predicates, to_remove) in groups {
+                for rem in &to_remove {
+                    stage.remove(rem);
+                }
+                remove_indices.extend(to_remove);
+                let mut node = &mut self.graph[node_index];
+                node.query = QueryNode::Where(col_name, predicates);
+            }
+        }
+    }
+
+    fn group_nodes(graph: &Graph<PlanNode, ColumnName>, stage: &NodeIndices)
+                   -> Vec<(NodeIndex, ColumnName, Predicates, NodeIndices)> {
+        let mut groups = vec![];
+        let mut already_matched: HashSet<NodeIndex> = HashSet::new();
+
+        for &node_index in stage.iter() {
+            if already_matched.contains(&node_index) {
+                continue;
+            };
+
+            let (col_name, predicates) = match graph[node_index].query {
+                QueryNode::Where(ref col_name, ref predicates) => (col_name, predicates),
+                _ => continue,
+            };
+
+            let mut predicates = predicates.clone();
+            let mut similar = HashSet::new();
+
+            for &inner_index in stage.iter() {
+                if node_index == inner_index {
+                    continue;
+                }
+
+                let (inner_col, inner_preds) = match graph[inner_index].query {
+                    QueryNode::Where(ref inner_col, ref inner_preds) => (inner_col, inner_preds),
+                    _ => continue,
+                };
+
+                if col_name.table != inner_col.table {
+                    continue;
+                }
+
+                already_matched.insert(inner_index);
+                similar.insert(inner_index);
+                predicates.extend(inner_preds.list.clone());
+            }
+
+            if similar.len() > 0 {
+                groups.push((node_index, col_name.clone(), predicates, similar))
+            }
+        }
+
+        groups
     }
 
     fn stage_query_types(&self) -> Vec<HashSet<usize>> {
