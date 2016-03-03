@@ -398,7 +398,15 @@ impl Plan {
 
 impl fmt::Display for Plan {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "Plan: {:?}\n", self.stages));
-        write!(f, "{}", Dot::new(&self.graph))
+        try!(write!(f, "Plan: "));
+        for (idx, stage) in self.stages.iter().enumerate() {
+            let s = stage.iter().map(|i| format!("{}", self.graph[i.to_owned()])).collect::<Vec<String>>();
+            try!(write!(f, "[{}]", s.join(", ")));
+
+            if idx != self.stages.len() - 1 {
+                try!(write!(f, ", "));
+            }
+        }
+        write!(f, "\n{}", Dot::new(&self.graph))
     }
 }
