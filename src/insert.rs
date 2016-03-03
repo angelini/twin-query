@@ -86,11 +86,11 @@ pub fn add_to_db(file_path: &str, schema_path: &str, csv_path: &str) {
 
     let mut count = 0;
     for row in rdr.records().map(|r| r.unwrap()) {
-        let eid = db.next_eid(&schema.table);
+        let id = db.next_id(&schema.table);
         let time = row.get(time_index).unwrap().parse::<usize>().unwrap();
 
         for (name, value) in schema.csv_ordering.iter().zip(row.iter()) {
-            db.add_datum(&name, eid, value.to_owned(), time).expect("Could not add to db");
+            db.add_datum(&name, id, value.to_owned(), time).expect("Could not add to db");
             count += 1;
         }
     }

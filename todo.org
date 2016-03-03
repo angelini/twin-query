@@ -17,8 +17,8 @@
 ** DONE Group operations on same stage
 
 * Query Execution
-** TODO Filter by eid
-** DONE Use column eids as roots of query cache
+** TODO Filter by id
+** DONE Use column ids as roots of query cache
 
 * Execution Optimizer
 ** TODO Use time predicates to filter columns

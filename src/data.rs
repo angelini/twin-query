@@ -30,15 +30,15 @@ impl fmt::Display for Value {
 
 #[derive(Debug, Clone, RustcEncodable, RustcDecodable)]
 pub struct Datum<T> {
-    pub eid: usize,
+    pub id: usize,
     pub value: T,
     pub time: usize,
 }
 
 impl<T> Datum<T> {
-    fn new(eid: usize, value: T, time: usize) -> Datum<T> {
+    fn new(id: usize, value: T, time: usize) -> Datum<T> {
         Datum {
-            eid: eid,
+            id: id,
             value: value,
             time: time,
         }
@@ -47,21 +47,21 @@ impl<T> Datum<T> {
 
 impl<T: fmt::Display> fmt::Display for Datum<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({}, {}, {})", self.eid, self.value, self.time)
+        write!(f, "({}, {}, {})", self.id, self.value, self.time)
     }
 }
 
 #[derive(Debug)]
 pub struct GenericDatum {
-    eid: usize,
+    id: usize,
     value: Value,
     time: usize,
 }
 
 impl GenericDatum {
-    pub fn new(eid: usize, value: Value, time: usize) -> Self {
+    pub fn new(id: usize, value: Value, time: usize) -> Self {
         GenericDatum {
-            eid: eid,
+            id: id,
             value: value,
             time: time,
         }
@@ -70,7 +70,7 @@ impl GenericDatum {
 
 impl fmt::Display for GenericDatum {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({}, {}, {})", self.eid, self.value, self.time)
+        write!(f, "({}, {}, {})", self.id, self.value, self.time)
     }
 }
 
@@ -88,8 +88,8 @@ impl ColumnName {
         }
     }
 
-    pub fn eid(&self) -> ColumnName {
-        ColumnName::new(self.table.to_owned(), "eid".to_owned())
+    pub fn id(&self) -> ColumnName {
+        ColumnName::new(self.table.to_owned(), "id".to_owned())
     }
 }
 
@@ -118,23 +118,23 @@ impl Data {
         match *self {
             Data::Bool(ref data) => {
                 data.get(index)
-                       .and_then(|datum| {
-                           Some(GenericDatum::new(datum.eid, Value::Bool(datum.value), datum.time))
-                       })
+                    .and_then(|datum| {
+                        Some(GenericDatum::new(datum.id, Value::Bool(datum.value), datum.time))
+                    })
             }
             Data::Int(ref data) => {
                 data.get(index)
-                       .and_then(|datum| {
-                           Some(GenericDatum::new(datum.eid, Value::Int(datum.value), datum.time))
-                       })
+                    .and_then(|datum| {
+                        Some(GenericDatum::new(datum.id, Value::Int(datum.value), datum.time))
+                    })
             }
             Data::String(ref data) => {
                 data.get(index)
-                       .and_then(|datum| {
-                           Some(GenericDatum::new(datum.eid,
-                                                Value::String(datum.value.clone()),
-                                                datum.time))
-                       })
+                    .and_then(|datum| {
+                        Some(GenericDatum::new(datum.id,
+                                               Value::String(datum.value.clone()),
+                                               datum.time))
+                    })
             }
         }
     }
@@ -170,7 +170,7 @@ pub enum Error {
     ParseError(ColumnName, ColumnType),
 }
 
-pub type Eids = HashSet<usize>;
+pub type Ids = HashSet<usize>;
 
 #[derive(Debug, RustcEncodable, RustcDecodable)]
 pub struct Column {
@@ -195,21 +195,21 @@ impl Column {
         self.data.sort()
     }
 
-    fn add_datum(&mut self, eid: usize, value: String, time: usize) -> Result<(), Error> {
+    fn add_datum(&mut self, id: usize, value: String, time: usize) -> Result<(), Error> {
         match self.data {
             Data::Bool(ref mut data) => {
                 match value.parse::<bool>() {
-                    Ok(v) => data.push(Datum::new(eid, v, time)),
+                    Ok(v) => data.push(Datum::new(id, v, time)),
                     Err(_) => return Err(Error::ParseError(self.name.clone(), ColumnType::Bool)),
                 }
             }
             Data::Int(ref mut data) => {
                 match value.parse::<usize>() {
-                    Ok(v) => data.push(Datum::new(eid, v, time)),
+                    Ok(v) => data.push(Datum::new(id, v, time)),
                     _ => return Err(Error::ParseError(self.name.clone(), ColumnType::Int)),
                 }
             }
-            Data::String(ref mut data) => data.push(Datum::new(eid, value, time)),
+            Data::String(ref mut data) => data.push(Datum::new(id, value, time)),
         };
         Ok(())
     }
@@ -218,7 +218,7 @@ impl Column {
 #[derive(Debug, RustcEncodable, RustcDecodable)]
 pub struct Db {
     pub cols: HashMap<ColumnName, Column>,
-    pub eids: HashMap<String, Eids>,
+    pub ids: HashMap<String, Ids>,
     entity_count: usize,
 }
 
@@ -226,7 +226,7 @@ impl Db {
     fn new() -> Db {
         Db {
             cols: HashMap::new(),
-            eids: HashMap::new(),
+            ids: HashMap::new(),
             entity_count: 0,
         }
     }
@@ -254,12 +254,12 @@ impl Db {
         Ok(())
     }
 
-    pub fn next_eid(&mut self, table: &str) -> usize {
-        let eids = self.eids.get_mut(table).expect(&format!("Cannot find table {}", table));
+    pub fn next_id(&mut self, table: &str) -> usize {
+        let ids = self.ids.get_mut(table).expect(&format!("Cannot find table {}", table));
         let next = self.entity_count;
 
         self.entity_count += 1;
-        eids.insert(next);
+        ids.insert(next);
 
         next
     }
@@ -269,19 +269,19 @@ impl Db {
             Some(_) => Err(Error::NameAlreadyTake(name)),
             None => {
                 self.cols.insert(name.clone(), Column::new(name.clone(), t));
-                self.eids.insert(name.table, Eids::new());
+                self.ids.insert(name.table, Ids::new());
                 Ok(())
             }
         }
     }
 
-    pub fn add_datum(&mut self, name: &ColumnName, eid: usize, value: String, time: usize)
+    pub fn add_datum(&mut self, name: &ColumnName, id: usize, value: String, time: usize)
                      -> Result<(), Error> {
         let mut col = match self.cols.get_mut(name) {
             Some(c) => c,
             None => return Err(Error::NameNotFound(name.to_owned())),
         };
-        col.add_datum(eid, value, time)
+        col.add_datum(id, value, time)
     }
 
     #[allow(for_kv_map)]

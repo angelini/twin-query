@@ -111,9 +111,9 @@ pub fn start_repl(path: &str) {
         println!("{}", plan);
 
         let names_and_data = db.cols
-                                  .iter()
-                                  .map(|(name, col)| (name, &col.data))
-                                  .collect::<Vec<(&ColumnName, &Data)>>();
+                               .iter()
+                               .map(|(name, col)| (name, &col.data))
+                               .collect::<Vec<(&ColumnName, &Data)>>();
         print_table(names_and_data, 20);
         println!("");
 
@@ -122,8 +122,8 @@ pub fn start_repl(path: &str) {
             Ok(data) => {
                 println!("exec time: {:?}", time::precise_time_s() - start);
                 print_table(data.iter()
-                                   .map(|&(ref n, ref e)| (n, e))
-                                   .collect(),
+                                .map(|&(ref n, ref e)| (n, e))
+                                .collect(),
                             2000)
             }
             Err(e) => {

@@ -129,19 +129,19 @@ impl PlanNode {
         let mut set = HashSet::new();
         let requires = match node {
             QueryNode::Select(ref name, _) => {
-                set.insert(name.eid());
+                set.insert(name.id());
                 Some(set)
             }
             QueryNode::Join(ref left, _) => {
-                set.insert(left.eid());
+                set.insert(left.id());
                 Some(set)
             }
             _ => None,
         };
 
         let provide = match node {
-            QueryNode::Join(_, ref right) => Some(right.eid()),
-            QueryNode::Where(ref left, _) => Some(left.eid()),
+            QueryNode::Join(_, ref right) => Some(right.id()),
+            QueryNode::Where(ref left, _) => Some(left.id()),
             _ => None,
         };
 
@@ -170,8 +170,8 @@ fn parse_line(line: QueryLine, limit: usize) -> Vec<PlanNode> {
             vec![PlanNode::from_query_node(QueryNode::Where(left, Predicates::new(comp, right)))]
         }
         QueryLine::Join(left, right) => {
-            let left_eid = ColumnName::new(left, "eid".to_owned());
-            vec![PlanNode::from_query_node(QueryNode::Join(left_eid, right))]
+            let left_id = ColumnName::new(left, "id".to_owned());
+            vec![PlanNode::from_query_node(QueryNode::Join(left_id, right))]
         }
         QueryLine::Limit => vec![],
     }
@@ -400,7 +400,9 @@ impl fmt::Display for Plan {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f, "Plan: "));
         for (idx, stage) in self.stages.iter().enumerate() {
-            let s = stage.iter().map(|i| format!("{}", self.graph[i.to_owned()])).collect::<Vec<String>>();
+            let s = stage.iter()
+                         .map(|i| format!("{}", self.graph[i.to_owned()]))
+                         .collect::<Vec<String>>();
             try!(write!(f, "[{}]", s.join(", ")));
 
             if idx != self.stages.len() - 1 {

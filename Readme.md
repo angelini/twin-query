@@ -3,17 +3,17 @@
 Data is stored as columns of triplets
 
 ```
-                          Db
-                         /  \
-           --------------    --------------
-           |                              |
-      table.column                   table.column
-           |                              |
-(entity_id, value, time)       (entity_id, value, time)
-(entity_id, value, time)       (entity_id, value, time)
-(entity_id, value, time)       (entity_id, value, time)
-(entity_id, value, time)       (entity_id, value, time)
-(entity_id, value, time)       (entity_id, value, time)
+                      Db
+                     /  \
+       --------------    --------------
+       |                              |
+  table.column                   table.column
+       |                              |
+(id, value, time)              (id, value, time)
+(id, value, time)              (id, value, time)
+(id, value, time)              (id, value, time)
+(id, value, time)              (id, value, time)
+(id, value, time)              (id, value, time)
 ```
 
 Queries have the following form
