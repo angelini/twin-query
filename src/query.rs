@@ -290,7 +290,7 @@ impl Plan {
                     _ => continue,
                 };
 
-                if col_name.table != inner_col.table {
+                if col_name != inner_col {
                     continue;
                 }
 
