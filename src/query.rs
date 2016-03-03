@@ -41,6 +41,12 @@ pub struct Predicate {
     value: Value,
 }
 
+impl fmt::Display for Predicate {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?} {:?}", self.comparator, self.value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Predicates {
     list: Vec<Predicate>,
@@ -67,6 +73,20 @@ impl Predicates {
     }
 }
 
+impl fmt::Display for Predicates {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "["));
+        let len = self.list.len();
+        for (i, predicate) in self.list.iter().enumerate() {
+            try!(write!(f, "{}", predicate));
+            if i != len - 1 {
+                try!(write!(f, ", "));
+            }
+        }
+        write!(f, "]")
+    }
+}
+
 impl Extend<Predicate> for Predicates {
     fn extend<T: IntoIterator<Item = Predicate>>(&mut self, iterable: T) {
         for elem in iterable {
@@ -77,9 +97,23 @@ impl Extend<Predicate> for Predicates {
 
 #[derive(Debug, Clone)]
 pub enum QueryNode {
+    Empty,
     Select(ColumnName),
     Join(ColumnName, ColumnName),
     Where(ColumnName, Predicates),
+}
+
+impl fmt::Display for QueryNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            QueryNode::Select(ref col_name) => write!(f, "Select({})", col_name),
+            QueryNode::Join(ref left, ref right) => write!(f, "Join({}, {})", left, right),
+            QueryNode::Where(ref col_name, ref preds) => {
+                write!(f, "Where({}, {})", col_name, preds)
+            }
+            QueryNode::Empty => write!(f, "Empty()"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -120,7 +154,7 @@ impl PlanNode {
 
 impl fmt::Display for PlanNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.query)
+        write!(f, "{}", self.query)
     }
 }
 
@@ -148,6 +182,7 @@ pub enum Error {
     NoStages,
     EmptyStages,
     InvalidStageOrder,
+    EmptyNodeInStages,
 }
 
 #[derive(Debug)]
@@ -189,6 +224,10 @@ impl Plan {
             if index < stages_len - 1 && types.contains(&1) {
                 return Err(Error::InvalidStageOrder);
             }
+
+            if types.contains(&4) {
+                return Err(Error::EmptyNodeInStages);
+            }
         }
 
         Ok(())
@@ -206,16 +245,15 @@ impl Plan {
     }
 
     fn optimize(&mut self) {
-        let mut remove_indices = HashSet::new();
-
         for stage in &mut self.stages {
             let groups = Self::group_nodes(&self.graph, stage);
 
             for (node_index, col_name, predicates, to_remove) in groups {
-                for rem in &to_remove {
-                    stage.remove(rem);
+                for rem in to_remove {
+                    stage.remove(&rem);
+                    self.graph[rem].query = QueryNode::Empty;
                 }
-                remove_indices.extend(to_remove);
+
                 let mut node = &mut self.graph[node_index];
                 node.query = QueryNode::Where(col_name, predicates);
             }
@@ -278,6 +316,7 @@ impl Plan {
                         QueryNode::Select(_) => stage_types.insert(1),
                         QueryNode::Join(_, _) => stage_types.insert(2),
                         QueryNode::Where(_, _) => stage_types.insert(3),
+                        QueryNode::Empty => stage_types.insert(4),
                     };
                 }
                 stage_types

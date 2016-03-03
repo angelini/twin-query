@@ -129,6 +129,7 @@ fn find_entries(db: &Db, cache: &Cache, node: &QueryNode) -> Result<(ColumnName,
             Ok((left_eid,
                 Filtered::Eids(match_by_predicates(&column.entries, predicates))))
         }
+        QueryNode::Empty => panic!("Tried to execute empty node")
     }
 }
 
