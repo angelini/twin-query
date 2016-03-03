@@ -3,7 +3,7 @@ use query::{Comparator, QueryLine};
 
 #[pub]
 query -> Vec<QueryLine>
-  = (select / join / where) ++ "\n"
+  = (select / join / where / limit) ++ "\n"
 
 select -> QueryLine
   = __ "s " __ e:col_names __ { QueryLine::Select(e) }
@@ -17,6 +17,9 @@ where -> QueryLine
   / __ "w "? l:col_name "<" r:value  { QueryLine::Where(l, Comparator::Less, r) }
   / __ "w "? l:col_name ">=" r:value { QueryLine::Where(l, Comparator::GreaterOrEqual, r) }
   / __ "w "? l:col_name "<=" r:value { QueryLine::Where(l, Comparator::LessOrEqual, r) }
+
+limit -> QueryLine
+  = __ "l " __ i:int __ { QueryLine::Limit(i) }
 
 col_names -> Vec<ColumnName>
   = col_name ++ ","

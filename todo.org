@@ -2,7 +2,7 @@
 #+TITLE: Twin-Query TODO
 
 * Syntax
-** TODO Add support for limit 'l'
+** DONE Add support for limit 'l'
 ** DONE Remove repeating 'w' and 'j'
 ** DONE Add new syntax for joins
 

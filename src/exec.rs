@@ -86,30 +86,33 @@ fn match_by_eids(entries: &[Entry<usize>], eids: &Eids) -> Eids {
            })
 }
 
-fn clone_matching_entries<T: Clone>(entries: &[Entry<T>], eids: &Eids) -> Vec<Entry<T>> {
+fn clone_matching_entries<T: Clone>(entries: &[Entry<T>], eids: &Eids, limit: usize) -> Vec<Entry<T>> {
     entries.iter()
            .filter(|entry| eids.contains(&entry.eid))
+           .take(limit)
            .cloned()
            .collect()
 }
 
-fn find_entries_by_set(entries: &Entries, eids: &HashSet<usize>) -> Entries {
+fn find_entries_by_set(entries: &Entries, eids: &HashSet<usize>, limit: usize) -> Entries {
     match *entries {
-        Entries::Bool(ref entries) => Entries::Bool(clone_matching_entries(entries, eids)),
-        Entries::Int(ref entries) => Entries::Int(clone_matching_entries(entries, eids)),
-        Entries::String(ref entries) => Entries::String(clone_matching_entries(entries, eids)),
+        Entries::Bool(ref entries) => Entries::Bool(clone_matching_entries(entries, eids, limit)),
+        Entries::Int(ref entries) => Entries::Int(clone_matching_entries(entries, eids, limit)),
+        Entries::String(ref entries) => {
+            Entries::String(clone_matching_entries(entries, eids, limit))
+        }
     }
 }
 
 fn find_entries(db: &Db, cache: &Cache, node: &QueryNode) -> Result<(ColumnName, Filtered), Error> {
     match *node {
-        QueryNode::Select(ref name) => {
+        QueryNode::Select(ref name, limit) => {
             let name_eid = name.eid();
             let eids = try!(cache.get(&name_eid).ok_or(Error::MissingColumn(name_eid)));
             let column = try!(db.cols.get(name).ok_or(Error::MissingColumn(name.to_owned())));
 
             Ok((name.to_owned(),
-                Filtered::Entries(find_entries_by_set(&column.entries, &eids))))
+                Filtered::Entries(find_entries_by_set(&column.entries, &eids, limit))))
         }
         QueryNode::Join(ref left, ref right) => {
             let eids = try!(cache.get(left).ok_or(Error::MissingColumn(left.to_owned())));
@@ -129,7 +132,7 @@ fn find_entries(db: &Db, cache: &Cache, node: &QueryNode) -> Result<(ColumnName,
             Ok((left_eid,
                 Filtered::Eids(match_by_predicates(&column.entries, predicates))))
         }
-        QueryNode::Empty => panic!("Tried to execute empty node")
+        QueryNode::Empty => panic!("Tried to execute empty node"),
     }
 }
 

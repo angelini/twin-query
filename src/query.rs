@@ -33,6 +33,7 @@ pub enum QueryLine {
     Select(Vec<ColumnName>),
     Join(String, ColumnName),
     Where(ColumnName, Comparator, Value),
+    Limit(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -98,7 +99,7 @@ impl Extend<Predicate> for Predicates {
 #[derive(Debug, Clone)]
 pub enum QueryNode {
     Empty,
-    Select(ColumnName),
+    Select(ColumnName, usize),
     Join(ColumnName, ColumnName),
     Where(ColumnName, Predicates),
 }
@@ -106,7 +107,7 @@ pub enum QueryNode {
 impl fmt::Display for QueryNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            QueryNode::Select(ref col_name) => write!(f, "Select({})", col_name),
+            QueryNode::Select(ref col_name, limit) => write!(f, "Select({}, {})", col_name, limit),
             QueryNode::Join(ref left, ref right) => write!(f, "Join({}, {})", left, right),
             QueryNode::Where(ref col_name, ref preds) => {
                 write!(f, "Where({}, {})", col_name, preds)
@@ -127,7 +128,7 @@ impl PlanNode {
     fn from_query_node(node: QueryNode) -> PlanNode {
         let mut set = HashSet::new();
         let requires = match node {
-            QueryNode::Select(ref name) => {
+            QueryNode::Select(ref name, _) => {
                 set.insert(name.eid());
                 Some(set)
             }
@@ -158,11 +159,11 @@ impl fmt::Display for PlanNode {
     }
 }
 
-fn parse_line(line: QueryLine) -> Vec<PlanNode> {
+fn parse_line(line: QueryLine, limit: usize) -> Vec<PlanNode> {
     match line {
         QueryLine::Select(cols) => {
             cols.into_iter()
-                .map(|col| PlanNode::from_query_node(QueryNode::Select(col)))
+                .map(|col| PlanNode::from_query_node(QueryNode::Select(col, limit)))
                 .collect()
         }
         QueryLine::Where(left, comp, right) => {
@@ -172,6 +173,7 @@ fn parse_line(line: QueryLine) -> Vec<PlanNode> {
             let left_eid = ColumnName::new(left, "eid".to_owned());
             vec![PlanNode::from_query_node(QueryNode::Join(left_eid, right))]
         }
+        QueryLine::Limit => vec![],
     }
 }
 
@@ -313,7 +315,7 @@ impl Plan {
                 for node_index in stage {
                     let plan_node = &self.graph[*node_index];
                     match plan_node.query {
-                        QueryNode::Select(_) => stage_types.insert(1),
+                        QueryNode::Select(_, _) => stage_types.insert(1),
                         QueryNode::Join(_, _) => stage_types.insert(2),
                         QueryNode::Where(_, _) => stage_types.insert(3),
                         QueryNode::Empty => stage_types.insert(4),
@@ -327,8 +329,14 @@ impl Plan {
     fn build_graph(lines: Vec<QueryLine>) -> Graph<PlanNode, ColumnName> {
         let mut graph = Graph::new();
 
+        let limit = lines.iter().fold(20, |acc, line| {
+            match *line {
+                QueryLine::Limit(size) => size,
+                _ => acc,
+            }
+        });
         let node_indices = lines.into_iter()
-                                .flat_map(parse_line)
+                                .flat_map(|line| parse_line(line, limit))
                                 .map(|node| (graph.add_node(node.clone()), node))
                                 .collect::<Vec<(NodeIndex, PlanNode)>>();
 
