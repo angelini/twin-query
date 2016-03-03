@@ -9,7 +9,7 @@ select -> QueryLine
   = __ "s " __ e:col_names __ { QueryLine::Select(e) }
 
 join -> QueryLine
-  = __ "j "? l:string " in " r:col_name { QueryLine::Join(l, r) }
+  = __ "j "? l:string " on " r:col_name { QueryLine::Join(l, r) }
 
 where -> QueryLine
   = __ "w "? l:col_name "=" r:value  { QueryLine::Where(l, Comparator::Equal, r) }

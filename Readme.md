@@ -20,7 +20,7 @@ Queries have the following form
 
 ```
 s <table.column>[, <table.column>]      # select
-j <table> in <table.column>             # join
+j <table> on <table.column>             # join
 w <table.column> <operator> <constant>  # where
 l <size>                                # limit
 ```
@@ -55,7 +55,7 @@ s bar.a, bar.b, bar.c, bar.foo, foo.a, foo.b, foo.c
 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 s bar.b
-j foo in bar.foo
+j foo on bar.foo
 w foo.a < 2
   foo.c = "first"
 
