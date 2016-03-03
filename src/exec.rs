@@ -2,7 +2,7 @@ use crossbeam;
 use std::collections::{HashMap, HashSet};
 use std::sync::mpsc;
 
-use data::{ColumnName, Db, Eids, Entries, Entry, Value};
+use data::{ColumnName, Db, Eids, Data, Datum, Value};
 use query::{Plan, Predicates, QueryNode};
 
 struct Cache<'a> {
@@ -38,7 +38,7 @@ impl<'a> Cache<'a> {
 
 #[derive(Debug)]
 enum Filtered {
-    Entries(Entries),
+    Data(Data),
     Eids(Eids),
 }
 
@@ -48,28 +48,28 @@ pub enum Error {
     InvalidJoin(ColumnName),
 }
 
-fn match_by_predicates(entries: &Entries, predicates: &Predicates) -> Eids {
+fn match_by_predicates(data: &Data, predicates: &Predicates) -> Eids {
     let mut eids = Eids::new();
 
-    match *entries {
-        Entries::Bool(ref entries) => {
-            for entry in entries {
-                if predicates.test(&Value::Bool(entry.value)) {
-                    eids.insert(entry.eid);
+    match *data {
+        Data::Bool(ref data) => {
+            for datum in data {
+                if predicates.test(&Value::Bool(datum.value)) {
+                    eids.insert(datum.eid);
                 }
             }
         }
-        Entries::Int(ref entries) => {
-            for entry in entries {
-                if predicates.test(&Value::Int(entry.value)) {
-                    eids.insert(entry.eid);
+        Data::Int(ref data) => {
+            for datum in data {
+                if predicates.test(&Value::Int(datum.value)) {
+                    eids.insert(datum.eid);
                 }
             }
         }
-        Entries::String(ref entries) => {
-            for entry in entries {
-                if predicates.test(&Value::String(entry.value.to_owned())) {
-                    eids.insert(entry.eid);
+        Data::String(ref data) => {
+            for datum in data {
+                if predicates.test(&Value::String(datum.value.to_owned())) {
+                    eids.insert(datum.eid);
                 }
             }
         }
@@ -78,35 +78,35 @@ fn match_by_predicates(entries: &Entries, predicates: &Predicates) -> Eids {
     eids
 }
 
-fn match_by_eids(entries: &[Entry<usize>], eids: &Eids) -> Eids {
-    entries.iter()
-           .fold(Eids::new(), |mut acc, entry| {
-               if eids.contains(&entry.value) {
-                   acc.insert(entry.eid);
+fn match_by_eids(data: &[Datum<usize>], eids: &Eids) -> Eids {
+    data.iter()
+           .fold(Eids::new(), |mut acc, datum| {
+               if eids.contains(&datum.value) {
+                   acc.insert(datum.eid);
                }
                acc
            })
 }
 
-fn clone_matching_entries<T: Clone>(entries: &[Entry<T>], eids: &Eids, limit: usize) -> Vec<Entry<T>> {
-    entries.iter()
-           .filter(|entry| eids.contains(&entry.eid))
+fn clone_matching_data<T: Clone>(data: &[Datum<T>], eids: &Eids, limit: usize) -> Vec<Datum<T>> {
+    data.iter()
+           .filter(|datum| eids.contains(&datum.eid))
            .take(limit)
            .cloned()
            .collect()
 }
 
-fn find_entries_by_set(entries: &Entries, eids: &HashSet<usize>, limit: usize) -> Entries {
-    match *entries {
-        Entries::Bool(ref entries) => Entries::Bool(clone_matching_entries(entries, eids, limit)),
-        Entries::Int(ref entries) => Entries::Int(clone_matching_entries(entries, eids, limit)),
-        Entries::String(ref entries) => {
-            Entries::String(clone_matching_entries(entries, eids, limit))
+fn find_data_by_set(data: &Data, eids: &HashSet<usize>, limit: usize) -> Data {
+    match *data {
+        Data::Bool(ref data) => Data::Bool(clone_matching_data(data, eids, limit)),
+        Data::Int(ref data) => Data::Int(clone_matching_data(data, eids, limit)),
+        Data::String(ref data) => {
+            Data::String(clone_matching_data(data, eids, limit))
         }
     }
 }
 
-fn find_entries(db: &Db, cache: &Cache, node: &QueryNode) -> Result<(ColumnName, Filtered), Error> {
+fn find_data(db: &Db, cache: &Cache, node: &QueryNode) -> Result<(ColumnName, Filtered), Error> {
     match *node {
         QueryNode::Select(ref name, limit) => {
             let name_eid = name.eid();
@@ -114,15 +114,15 @@ fn find_entries(db: &Db, cache: &Cache, node: &QueryNode) -> Result<(ColumnName,
             let column = try!(db.cols.get(name).ok_or(Error::MissingColumn(name.to_owned())));
 
             Ok((name.to_owned(),
-                Filtered::Entries(find_entries_by_set(&column.entries, &eids, limit))))
+                Filtered::Data(find_data_by_set(&column.data, &eids, limit))))
         }
         QueryNode::Join(ref left, ref right) => {
             let eids = try!(cache.get(left).ok_or(Error::MissingColumn(left.to_owned())));
             let column = try!(db.cols.get(right).ok_or(Error::MissingColumn(right.to_owned())));
 
-            match column.entries {
-                Entries::Int(ref entries) => {
-                    Ok((right.eid(), Filtered::Eids(match_by_eids(entries, eids))))
+            match column.data {
+                Data::Int(ref data) => {
+                    Ok((right.eid(), Filtered::Eids(match_by_eids(data, eids))))
                 }
                 _ => Err(Error::InvalidJoin(right.to_owned())),
             }
@@ -132,7 +132,7 @@ fn find_entries(db: &Db, cache: &Cache, node: &QueryNode) -> Result<(ColumnName,
             let column = try!(db.cols.get(left).ok_or(Error::MissingColumn(left.to_owned())));
 
             Ok((left_eid,
-                Filtered::Eids(match_by_predicates(&column.entries, predicates))))
+                Filtered::Eids(match_by_predicates(&column.data, predicates))))
         }
         QueryNode::Empty => panic!("Tried to execute empty node"),
     }
@@ -145,7 +145,7 @@ fn exec_stage(db: &Db, cache: &Cache, stage: &[&QueryNode]) -> Result<Vec<(Colum
         for query_node in stage {
             let t_tx = tx.clone();
             scope.spawn(move || {
-                let (name, filtered) = find_entries(&db, &cache, query_node).unwrap();
+                let (name, filtered) = find_data(&db, &cache, query_node).unwrap();
                 t_tx.send((name, filtered)).unwrap();
             });
         }
@@ -159,7 +159,7 @@ fn exec_stage(db: &Db, cache: &Cache, stage: &[&QueryNode]) -> Result<Vec<(Colum
     Ok(results)
 }
 
-pub fn exec(db: &Db, plan: &Plan) -> Result<Vec<(ColumnName, Entries)>, Error> {
+pub fn exec(db: &Db, plan: &Plan) -> Result<Vec<(ColumnName, Data)>, Error> {
     let mut cache = Cache::new(db);
     let mut result = vec![];
 
@@ -169,7 +169,7 @@ pub fn exec(db: &Db, plan: &Plan) -> Result<Vec<(ColumnName, Entries)>, Error> {
         for (name, filtered) in try!(exec_stage(db, &cache, query_nodes)) {
             match filtered {
                 Filtered::Eids(eids) => cache.insert_or_merge(name, eids),
-                Filtered::Entries(entries) => result.push((name, entries)),
+                Filtered::Data(data) => result.push((name, data)),
             }
         }
     }

@@ -25,7 +25,7 @@ w <table.column> <operator> <constant>  # where
 l <size>                                # limit
 ```
 
-Add entries to a new Db from multiple CSV files
+Add data to a new Db from multiple CSV files
 
 ```
 $ twin-query add sample.db data/foo.schema data/foo.csv

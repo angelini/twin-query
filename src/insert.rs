@@ -90,12 +90,12 @@ pub fn add_to_db(file_path: &str, schema_path: &str, csv_path: &str) {
         let time = row.get(time_index).unwrap().parse::<usize>().unwrap();
 
         for (name, value) in schema.csv_ordering.iter().zip(row.iter()) {
-            db.add_entry(&name, eid, value.to_owned(), time).expect("Could not add to db");
+            db.add_datum(&name, eid, value.to_owned(), time).expect("Could not add to db");
             count += 1;
         }
     }
 
-    println!("added {:?} entries", count);
+    println!("added {:?} datums", count);
     db.sort_columns();
     db.write(file_path).expect("Could not write db to disk");
 }

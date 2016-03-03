@@ -9,7 +9,7 @@ use std::path::Path;
 use std::process;
 use time;
 
-use data::{ColumnName, Db, Entries};
+use data::{ColumnName, Db, Data};
 use exec;
 use query::Plan;
 
@@ -37,7 +37,7 @@ fn read_query_raw() -> String {
     }
 }
 
-fn print_table(cols: Vec<(&ColumnName, &Entries)>, limit: usize) {
+fn print_table(cols: Vec<(&ColumnName, &Data)>, limit: usize) {
     let mut cols = cols;
     cols.sort_by(|a, b| format!("{}", a.0).cmp(&format!("{}", b.0)));
 
@@ -49,13 +49,13 @@ fn print_table(cols: Vec<(&ColumnName, &Entries)>, limit: usize) {
                         .collect::<Vec<Cell>>();
     table.set_titles(Row::new(col_names));
 
-    let max_col_len = cols.iter().fold(0, |acc, &(_, ref entries)| cmp::max(acc, entries.len()));
+    let max_col_len = cols.iter().fold(0, |acc, &(_, ref data)| cmp::max(acc, data.len()));
 
     for i in 0..cmp::min(limit, max_col_len) {
         let mut row = vec![];
-        for &(_, ref entries) in &cols {
-            let entry = entries.get(i).unwrap();
-            row.push(Cell::new(&format!("{}", entry)));
+        for &(_, ref data) in &cols {
+            let datum = data.get(i).unwrap();
+            row.push(Cell::new(&format!("{}", datum)));
         }
         table.add_row(Row::new(row));
     }
@@ -110,18 +110,18 @@ pub fn start_repl(path: &str) {
         println!("query parse time: {:?}", time::precise_time_s() - start);
         println!("{}", plan);
 
-        let names_and_entries = db.cols
+        let names_and_data = db.cols
                                   .iter()
-                                  .map(|(name, col)| (name, &col.entries))
-                                  .collect::<Vec<(&ColumnName, &Entries)>>();
-        print_table(names_and_entries, 20);
+                                  .map(|(name, col)| (name, &col.data))
+                                  .collect::<Vec<(&ColumnName, &Data)>>();
+        print_table(names_and_data, 20);
         println!("");
 
         start = time::precise_time_s();
         match exec::exec(&db, &plan) {
-            Ok(entries) => {
+            Ok(data) => {
                 println!("exec time: {:?}", time::precise_time_s() - start);
-                print_table(entries.iter()
+                print_table(data.iter()
                                    .map(|&(ref n, ref e)| (n, e))
                                    .collect(),
                             2000)
