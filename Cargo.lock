@@ -5,6 +5,7 @@ dependencies = [
  "bincode 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "clippy 0.0.44 (registry+https://github.com/rust-lang/crates.io-index)",
+ "crossbeam 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "csv 0.14.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "flate2 0.2.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "peg 0.3.10 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -86,6 +87,11 @@ dependencies = [
  "semver 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-normalization 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "crossbeam"
+version = "0.2.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "csv"

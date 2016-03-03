@@ -7,6 +7,7 @@
 extern crate bincode;
 extern crate clap;
 extern crate csv;
+extern crate crossbeam;
 extern crate flate2;
 extern crate petgraph;
 extern crate prettytable;

@@ -1,4 +1,6 @@
+use crossbeam;
 use std::collections::{HashMap, HashSet};
+use std::sync::mpsc;
 
 use data::{ColumnName, Db, Eids, Entries, Entry, Value};
 use query::{Plan, Predicates, QueryNode};
@@ -136,6 +138,27 @@ fn find_entries(db: &Db, cache: &Cache, node: &QueryNode) -> Result<(ColumnName,
     }
 }
 
+fn exec_stage(db: &Db, cache: &Cache, stage: &[&QueryNode]) -> Result<Vec<(ColumnName, Filtered)>, Error> {
+    let (tx, rx) = mpsc::channel();
+
+    crossbeam::scope(|scope| {
+        for query_node in stage {
+            let t_tx = tx.clone();
+            scope.spawn(move || {
+                let (name, filtered) = find_entries(&db, &cache, query_node).unwrap();
+                t_tx.send((name, filtered)).unwrap();
+            });
+        }
+    });
+
+    let mut results = vec![];
+    for _ in 0..stage.len() {
+        results.push(rx.recv().unwrap())
+    }
+
+    Ok(results)
+}
+
 pub fn exec(db: &Db, plan: &Plan) -> Result<Vec<(ColumnName, Entries)>, Error> {
     let mut cache = Cache::new(db);
     let mut result = vec![];
@@ -143,9 +166,7 @@ pub fn exec(db: &Db, plan: &Plan) -> Result<Vec<(ColumnName, Entries)>, Error> {
     let stage_query_nodes = plan.stage_query_nodes();
 
     for query_nodes in &stage_query_nodes {
-        for query_node in query_nodes {
-            let (name, filtered) = try!(find_entries(db, &cache, query_node));
-
+        for (name, filtered) in try!(exec_stage(db, &cache, query_nodes)) {
             match filtered {
                 Filtered::Eids(eids) => cache.insert_or_merge(name, eids),
                 Filtered::Entries(entries) => result.push((name, entries)),
