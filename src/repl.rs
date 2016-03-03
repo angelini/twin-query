@@ -79,12 +79,12 @@ pub fn start_repl(path: &str) {
 
         let query_raw = read_query_raw();
         if query_raw == "exit" {
-            histfile::write(Some(history_path)).expect("Cannot write history");
             mgmt::cleanup();
             process::exit(0);
         };
 
         listmgmt::add(&query_raw).expect("Cannot save history");
+        histfile::write(Some(history_path)).expect("Cannot write history");
 
         start = time::precise_time_s();
         let query_lines = grammar::query(&query_raw);
@@ -124,7 +124,7 @@ pub fn start_repl(path: &str) {
                 print_table(entries.iter()
                                    .map(|&(ref n, ref e)| (n, e))
                                    .collect(),
-                            20)
+                            2000)
             }
             Err(e) => {
                 println!("{:?}", e);
