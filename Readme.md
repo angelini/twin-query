@@ -68,3 +68,12 @@ w foo.a < 2
 | (5, true, 22) |
 +---------------+
 ```
+
+Running integration tests
+
+```
+$ python test-runner.py
+
+Running tests/sample
+.....
+```
