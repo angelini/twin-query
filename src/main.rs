@@ -60,8 +60,8 @@ fn main() {
     }
 
     if let Some(matches) = matches.subcommand_matches("query") {
-        exec_query(matches.value_of("FILE").unwrap(),
-                   matches.value_of("QUERY").unwrap());
+        let vals: Vec<&str> = matches.values_of("QUERY").unwrap().collect();
+        exec_query(matches.value_of("FILE").unwrap(), &vals.join(","));
     }
 
     if let Some(matches) = matches.subcommand_matches("add") {

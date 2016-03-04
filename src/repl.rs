@@ -41,7 +41,7 @@ pub fn print_table(cols: Vec<(&ColumnName, &Data)>, limit: usize) {
     cols.sort_by(|a, b| format!("{}", a.0).cmp(&format!("{}", b.0)));
 
     let mut table = Table::new();
-    table.set_format(*format::consts::FORMAT_NO_LINESEP_WITH_TITLE);
+    table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
 
     let col_names = cols.iter()
                         .map(|&(ref name, _)| Cell::new(&format!("{}", name)))
@@ -66,7 +66,7 @@ pub fn start_repl(path: &str) {
     let history_path = Path::new("./.history");
     let mut start = time::precise_time_s();
     let db = Db::from_file(path).expect("Cannot load db from file");
-    println!("load time: {:?}", time::precise_time_s() - start);
+    println!("\nload time: {:?}", time::precise_time_s() - start);
 
     mgmt::init();
     if history_path.exists() {
@@ -95,7 +95,7 @@ pub fn start_repl(path: &str) {
         };
 
         println!("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n");
-        println!("query parse time: {:?}", time::precise_time_s() - start);
+        println!("query parse time: {:?}\n", time::precise_time_s() - start);
         println!("{}", plan);
 
         let names_and_data = db.cols
@@ -108,7 +108,7 @@ pub fn start_repl(path: &str) {
         start = time::precise_time_s();
         match exec::exec(&db, &plan) {
             Ok(data) => {
-                println!("exec time: {:?}", time::precise_time_s() - start);
+                println!("exec time: {:?}\n", time::precise_time_s() - start);
                 print_table(data.iter()
                                 .map(|&(ref n, ref e)| (n, e))
                                 .collect(),
