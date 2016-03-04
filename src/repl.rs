@@ -7,13 +7,12 @@ use rl_sys::history::{listmgmt, mgmt, histfile};
 use std::cmp;
 use std::path::Path;
 use std::process;
+use std::str::FromStr;
 use time;
 
 use data::{ColumnName, Db, Data};
 use exec;
 use query::Plan;
-
-peg_file! grammar("grammar.rustpeg");
 
 fn read_query_raw() -> String {
     let mut query = "".to_owned();
@@ -37,7 +36,7 @@ fn read_query_raw() -> String {
     }
 }
 
-fn print_table(cols: Vec<(&ColumnName, &Data)>, limit: usize) {
+pub fn print_table(cols: Vec<(&ColumnName, &Data)>, limit: usize) {
     let mut cols = cols;
     cols.sort_by(|a, b| format!("{}", a.0).cmp(&format!("{}", b.0)));
 
@@ -87,21 +86,10 @@ pub fn start_repl(path: &str) {
         histfile::write(Some(history_path)).expect("Cannot write history");
 
         start = time::precise_time_s();
-        let query_lines = grammar::query(&query_raw);
-        let plan = match query_lines {
-            Ok(lines) => {
-                let p = Plan::new(lines);
-                let valid = p.is_valid();
-
-                if valid.is_err() {
-                    println!("{}", p);
-                    println!("{:?}", valid);
-                    continue;
-                }
-                p
-            }
+        let plan = match Plan::from_str(&query_raw) {
+            Ok(plan) => plan,
             Err(e) => {
-                println!("{}", e);
+                println!("{:?}", e);
                 continue;
             }
         };

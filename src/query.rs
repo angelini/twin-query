@@ -4,8 +4,11 @@ use petgraph::graph::NodeIndex;
 use std::cmp;
 use std::collections::HashSet;
 use std::fmt;
+use std::str;
 
 use data::{ColumnName, Value};
+
+peg_file! grammar("grammar.rustpeg");
 
 #[derive(Debug, Clone)]
 pub enum Comparator {
@@ -181,6 +184,7 @@ type NodeIndices = HashSet<NodeIndex>;
 
 #[derive(Debug)]
 pub enum Error {
+    ParseError(grammar::ParseError),
     NoStages,
     EmptyStages,
     InvalidStageOrder,
@@ -396,6 +400,17 @@ impl Plan {
     }
 }
 
+impl str::FromStr for Plan {
+    type Err = Error;
+
+    fn from_str(query: &str) -> Result<Self, Self::Err> {
+        let query_lines = try!(grammar::query(query));
+        let plan = Plan::new(query_lines);
+        try!(plan.is_valid());
+        Ok(plan)
+    }
+}
+
 impl fmt::Display for Plan {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f, "Plan: "));
@@ -410,5 +425,11 @@ impl fmt::Display for Plan {
             }
         }
         write!(f, "\n{}", Dot::new(&self.graph))
+    }
+}
+
+impl From<grammar::ParseError> for Error {
+    fn from(err: grammar::ParseError) -> Error {
+        Error::ParseError(err)
     }
 }
