@@ -35,7 +35,7 @@ $ twin-query add sample.db data/bar.schema data/bar.csv
 Start a query REPL using the new Db
 
 ```
-$ twin-query query sample.db
+$ twin-query repl sample.db
 
 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
