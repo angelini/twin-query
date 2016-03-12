@@ -40,61 +40,19 @@ pub enum QueryLine {
 }
 
 #[derive(Debug, Clone)]
-pub struct Predicate {
-    comparator: Comparator,
-    value: Value,
+pub enum Predicate {
+    Constant(Comparator, Value),
+    And(Box<Predicate>, Box<Predicate>),
+    Or(Box<Predicate>, Box<Predicate>),
 }
 
-impl fmt::Display for Predicate {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?} {:?}", self.comparator, self.value)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Predicates {
-    list: Vec<Predicate>,
-}
-
-impl Predicates {
-    pub fn test(&self, left: &Value) -> bool {
-        self.list.iter().fold(true, |acc, predicate| {
-            acc && predicate.comparator.test(left, &predicate.value)
-        })
-    }
-
-    fn new(comp: Comparator, val: Value) -> Predicates {
-        Predicates {
-            list: vec![Predicate {
-                           comparator: comp,
-                           value: val,
-                       }],
-        }
-    }
-
-    fn add(&mut self, predicate: Predicate) {
-        self.list.push(predicate)
-    }
-}
-
-impl fmt::Display for Predicates {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "["));
-        let len = self.list.len();
-        for (i, predicate) in self.list.iter().enumerate() {
-            try!(write!(f, "{}", predicate));
-            if i != len - 1 {
-                try!(write!(f, ", "));
-            }
-        }
-        write!(f, "]")
-    }
-}
-
-impl Extend<Predicate> for Predicates {
-    fn extend<T: IntoIterator<Item = Predicate>>(&mut self, iterable: T) {
-        for elem in iterable {
-            self.add(elem);
+impl Predicate {
+    #![allow(unconditional_recursion)]
+    pub fn test(&self, value: &Value) -> bool {
+        match *self {
+            Predicate::Constant(ref comp, ref right) => comp.test(value, right),
+            Predicate::And(ref left, ref right) => left.test(value) && right.test(value),
+            Predicate::Or(ref left, ref right) => left.test(value) || right.test(value),
         }
     }
 }
@@ -104,7 +62,7 @@ pub enum QueryNode {
     Empty,
     Select(ColumnName, usize),
     Join(ColumnName, ColumnName),
-    Where(ColumnName, Predicates),
+    Where(ColumnName, Predicate),
 }
 
 impl fmt::Display for QueryNode {
@@ -112,8 +70,8 @@ impl fmt::Display for QueryNode {
         match *self {
             QueryNode::Select(ref col_name, limit) => write!(f, "Select({}, {})", col_name, limit),
             QueryNode::Join(ref left, ref right) => write!(f, "Join({}, {})", left, right),
-            QueryNode::Where(ref col_name, ref preds) => {
-                write!(f, "Where({}, {})", col_name, preds)
+            QueryNode::Where(ref col_name, ref pred) => {
+                write!(f, "Where({}, {:?})", col_name, pred)
             }
             QueryNode::Empty => write!(f, "Empty()"),
         }
@@ -170,7 +128,8 @@ fn parse_line(line: QueryLine, limit: usize) -> Vec<PlanNode> {
                 .collect()
         }
         QueryLine::Where(left, comp, right) => {
-            vec![PlanNode::from_query_node(QueryNode::Where(left, Predicates::new(comp, right)))]
+            vec![PlanNode::from_query_node(QueryNode::Where(left,
+                                                            Predicate::Constant(comp, right)))]
         }
         QueryLine::Join(left, right) => {
             let left_id = ColumnName::new(left, "id".to_owned());
@@ -254,20 +213,20 @@ impl Plan {
         for stage in &mut self.stages {
             let groups = Self::group_nodes(&self.graph, stage);
 
-            for (node_index, col_name, predicates, to_remove) in groups {
+            for (node_index, col_name, predicate, to_remove) in groups {
                 for rem in to_remove {
                     stage.remove(&rem);
                     self.graph[rem].query = QueryNode::Empty;
                 }
 
                 let mut node = &mut self.graph[node_index];
-                node.query = QueryNode::Where(col_name, predicates);
+                node.query = QueryNode::Where(col_name, predicate);
             }
         }
     }
 
     fn group_nodes(graph: &Graph<PlanNode, ColumnName>, stage: &NodeIndices)
-                   -> Vec<(NodeIndex, ColumnName, Predicates, NodeIndices)> {
+                   -> Vec<(NodeIndex, ColumnName, Predicate, NodeIndices)> {
         let mut groups = vec![];
         let mut already_matched: HashSet<NodeIndex> = HashSet::new();
 
@@ -276,12 +235,12 @@ impl Plan {
                 continue;
             };
 
-            let (col_name, predicates) = match graph[node_index].query {
-                QueryNode::Where(ref col_name, ref predicates) => (col_name, predicates),
+            let (col_name, predicate) = match graph[node_index].query {
+                QueryNode::Where(ref col_name, ref predicate) => (col_name, predicate),
                 _ => continue,
             };
 
-            let mut predicates = predicates.clone();
+            let mut predicate = predicate.to_owned();
             let mut similar = HashSet::new();
 
             for &inner_index in stage.iter() {
@@ -289,8 +248,8 @@ impl Plan {
                     continue;
                 }
 
-                let (inner_col, inner_preds) = match graph[inner_index].query {
-                    QueryNode::Where(ref inner_col, ref inner_preds) => (inner_col, inner_preds),
+                let (inner_col, inner_pred) = match graph[inner_index].query {
+                    QueryNode::Where(ref inner_col, ref inner_pred) => (inner_col, inner_pred),
                     _ => continue,
                 };
 
@@ -300,11 +259,11 @@ impl Plan {
 
                 already_matched.insert(inner_index);
                 similar.insert(inner_index);
-                predicates.extend(inner_preds.list.clone());
+                predicate = Predicate::And(Box::new(predicate), Box::new(inner_pred.to_owned()));
             }
 
             if similar.len() > 0 {
-                groups.push((node_index, col_name.clone(), predicates, similar))
+                groups.push((node_index, col_name.clone(), predicate, similar))
             }
         }
 

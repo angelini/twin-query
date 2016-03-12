@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::mpsc;
 
 use data::{ColumnName, Db, Ids, Data, Datum, Value};
-use query::{Plan, Predicates, QueryNode};
+use query::{Plan, Predicate, QueryNode};
 
 struct Cache<'a> {
     db: &'a Db,
@@ -48,27 +48,27 @@ pub enum Error {
     InvalidJoin(ColumnName),
 }
 
-fn match_by_predicates(data: &Data, predicates: &Predicates) -> Ids {
+fn match_by_predicate(data: &Data, predicate: &Predicate) -> Ids {
     let mut ids = Ids::new();
 
     match *data {
         Data::Bool(ref data) => {
             for datum in data {
-                if predicates.test(&Value::Bool(datum.value)) {
+                if predicate.test(&Value::Bool(datum.value)) {
                     ids.insert(datum.id);
                 }
             }
         }
         Data::Int(ref data) => {
             for datum in data {
-                if predicates.test(&Value::Int(datum.value)) {
+                if predicate.test(&Value::Int(datum.value)) {
                     ids.insert(datum.id);
                 }
             }
         }
         Data::String(ref data) => {
             for datum in data {
-                if predicates.test(&Value::String(datum.value.to_owned())) {
+                if predicate.test(&Value::String(datum.value.to_owned())) {
                     ids.insert(datum.id);
                 }
             }
@@ -123,12 +123,12 @@ fn find_data(db: &Db, cache: &Cache, node: &QueryNode) -> Result<(ColumnName, Fi
                 _ => Err(Error::InvalidJoin(right.to_owned())),
             }
         }
-        QueryNode::Where(ref left, ref predicates) => {
+        QueryNode::Where(ref left, ref predicate) => {
             let left_id = left.id();
             let column = try!(db.cols.get(left).ok_or(Error::MissingColumn(left.to_owned())));
 
             Ok((left_id,
-                Filtered::Ids(match_by_predicates(&column.data, predicates))))
+                Filtered::Ids(match_by_predicate(&column.data, predicate))))
         }
         QueryNode::Empty => panic!("Tried to execute empty node"),
     }
