@@ -8,7 +8,12 @@
 ** DONE Add new syntax for joins
 
 * Data Layout
+** TODO Add virtual columns time & id
+** TODO Support float, date and time
 ** DONE Sort columns by time
+
+* Data Insert
+** TODO Add id_column
 
 * Query Validator
 ** DONE Query node ordering
