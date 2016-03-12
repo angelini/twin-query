@@ -31,14 +31,6 @@ impl Comparator {
     }
 }
 
-#[derive(Debug)]
-pub enum QueryLine {
-    Select(Vec<ColumnName>),
-    Join(String, ColumnName),
-    Where(ColumnName, Comparator, Value),
-    Limit(usize),
-}
-
 #[derive(Debug, Clone)]
 pub enum Predicate {
     Constant(Comparator, Value),
@@ -47,14 +39,37 @@ pub enum Predicate {
 }
 
 impl Predicate {
-    #![allow(unconditional_recursion)]
+    pub fn or_from_vec(mut predicates: Vec<Predicate>) -> Predicate {
+        if predicates.len() == 1 {
+            return predicates.pop().unwrap();
+        }
+
+        if predicates.len() == 2 {
+            return Predicate::Or(Box::new(predicates.pop().unwrap()),
+                                 Box::new(predicates.pop().unwrap()));
+        }
+
+        let first = predicates.pop();
+        Predicate::Or(Box::new(first.unwrap()),
+                      Box::new(Self::or_from_vec(predicates)))
+    }
+
     pub fn test(&self, value: &Value) -> bool {
+        #![allow(unconditional_recursion)]
         match *self {
             Predicate::Constant(ref comp, ref right) => comp.test(value, right),
             Predicate::And(ref left, ref right) => left.test(value) && right.test(value),
             Predicate::Or(ref left, ref right) => left.test(value) || right.test(value),
         }
     }
+}
+
+#[derive(Debug)]
+pub enum QueryLine {
+    Select(Vec<ColumnName>),
+    Join(String, ColumnName),
+    Where(ColumnName, Predicate),
+    Limit(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -127,9 +142,8 @@ fn parse_line(line: QueryLine, limit: usize) -> Vec<PlanNode> {
                 .map(|col| PlanNode::from_query_node(QueryNode::Select(col, limit)))
                 .collect()
         }
-        QueryLine::Where(left, comp, right) => {
-            vec![PlanNode::from_query_node(QueryNode::Where(left,
-                                                            Predicate::Constant(comp, right)))]
+        QueryLine::Where(left, pred) => {
+            vec![PlanNode::from_query_node(QueryNode::Where(left, pred))]
         }
         QueryLine::Join(left, right) => {
             let left_id = ColumnName::new(left, "id".to_owned());

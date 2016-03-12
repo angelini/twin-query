@@ -1,5 +1,5 @@
 use data::{ColumnName, Value};
-use query::{Comparator, QueryLine};
+use query::{Comparator, Predicate, QueryLine};
 
 #[pub]
 query -> Vec<QueryLine>
@@ -12,14 +12,20 @@ join -> QueryLine
   = __ "j "? l:string " on " r:col_name { QueryLine::Join(l, r) }
 
 where -> QueryLine
-  = __ "w "? l:col_name "=" r:value  { QueryLine::Where(l, Comparator::Equal, r) }
-  / __ "w "? l:col_name ">" r:value  { QueryLine::Where(l, Comparator::Greater, r) }
-  / __ "w "? l:col_name "<" r:value  { QueryLine::Where(l, Comparator::Less, r) }
-  / __ "w "? l:col_name ">=" r:value { QueryLine::Where(l, Comparator::GreaterOrEqual, r) }
-  / __ "w "? l:col_name "<=" r:value { QueryLine::Where(l, Comparator::LessOrEqual, r) }
+  = __ "w "? l:col_name p:or_predicate  { QueryLine::Where(l, p) }
 
 limit -> QueryLine
   = __ "l " __ i:int __ { QueryLine::Limit(i) }
+
+or_predicate -> Predicate
+  = p:constant_predicate ++ "or" { Predicate::or_from_vec(p) }
+
+constant_predicate -> Predicate
+  = __ "=" r:value __ { Predicate::Constant(Comparator::Equal, r) }
+  / __ ">" r:value __ { Predicate::Constant(Comparator::Greater, r) }
+  / __ "<" r:value __ { Predicate::Constant(Comparator::Less, r) }
+  / __ ">=" r:value __ { Predicate::Constant(Comparator::GreaterOrEqual, r) }
+  / __ "<=" r:value __ { Predicate::Constant(Comparator::LessOrEqual, r) }
 
 col_names -> Vec<ColumnName>
   = col_name ++ ","
