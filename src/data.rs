@@ -176,6 +176,7 @@ pub type Ids = HashSet<usize>;
 pub struct Column {
     pub name: ColumnName,
     pub data: Data,
+    time_index: Option<[usize; 5]>,
 }
 
 impl Column {
@@ -188,11 +189,29 @@ impl Column {
         Column {
             name: name,
             data: data,
+            time_index: None,
         }
     }
 
     fn sort(&mut self) {
         self.data.sort()
+    }
+
+    #[allow(needless_range_loop)]
+    fn index_by_time(&mut self) {
+        let len = self.data.len();
+        let mut index = [0, 0, 0, 0, 0];
+
+        if len < 5 {
+            return;
+        }
+
+        let increment = len / 5;
+        for i in 0..5 {
+            index[i] = self.data.get(increment * i).unwrap().time;
+        }
+
+        self.time_index = Some(index);
     }
 
     fn add_datum(&mut self, id: usize, value: String, time: usize) -> Result<(), Error> {
@@ -285,9 +304,10 @@ impl Db {
     }
 
     #[allow(for_kv_map)]
-    pub fn sort_columns(&mut self) {
+    pub fn optimize_columns(&mut self) {
         for (_, col) in &mut self.cols {
-            col.sort()
+            col.sort();
+            col.index_by_time()
         }
     }
 }

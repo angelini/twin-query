@@ -96,6 +96,6 @@ pub fn add_to_db(file_path: &str, schema_path: &str, csv_path: &str) {
     }
 
     println!("added {:?} datums", count);
-    db.sort_columns();
+    db.optimize_columns();
     db.write(file_path).expect("Could not write db to disk");
 }
