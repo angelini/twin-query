@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::mpsc;
 
 use data::{ColumnName, Db, Ids, Data, Datum, Value};
-use query::{Plan, Predicate, QueryNode};
+use query::{Plan, Predicate, PlanNode};
 
 struct Cache<'a> {
     db: &'a Db,
@@ -104,9 +104,9 @@ fn find_data_by_set(data: &Data, ids: &HashSet<usize>, limit: usize) -> Data {
     }
 }
 
-fn find_data(db: &Db, cache: &Cache, node: &QueryNode) -> Result<(ColumnName, Filtered), Error> {
+fn find_data(db: &Db, cache: &Cache, node: &PlanNode) -> Result<(ColumnName, Filtered), Error> {
     match *node {
-        QueryNode::Select(ref name, limit) => {
+        PlanNode::Select(ref name, limit) => {
             let name_id = name.id();
             let ids = try!(cache.get(&name_id).ok_or(Error::MissingColumn(name_id)));
             let column = try!(db.cols.get(name).ok_or(Error::MissingColumn(name.to_owned())));
@@ -114,7 +114,7 @@ fn find_data(db: &Db, cache: &Cache, node: &QueryNode) -> Result<(ColumnName, Fi
             Ok((name.to_owned(),
                 Filtered::Data(find_data_by_set(&column.data, &ids, limit))))
         }
-        QueryNode::Join(ref left, ref right) => {
+        PlanNode::Join(ref left, ref right) => {
             let ids = try!(cache.get(left).ok_or(Error::MissingColumn(left.to_owned())));
             let column = try!(db.cols.get(right).ok_or(Error::MissingColumn(right.to_owned())));
 
@@ -123,18 +123,18 @@ fn find_data(db: &Db, cache: &Cache, node: &QueryNode) -> Result<(ColumnName, Fi
                 _ => Err(Error::InvalidJoin(right.to_owned())),
             }
         }
-        QueryNode::Where(ref left, ref predicate) => {
+        PlanNode::Where(ref left, ref predicate) => {
             let left_id = left.id();
             let column = try!(db.cols.get(left).ok_or(Error::MissingColumn(left.to_owned())));
 
             Ok((left_id,
                 Filtered::Ids(match_by_predicate(&column.data, predicate))))
         }
-        QueryNode::Empty => panic!("Tried to execute empty node"),
+        PlanNode::Empty => panic!("Tried to execute empty node"),
     }
 }
 
-fn exec_stage(db: &Db, cache: &Cache, stage: &[&QueryNode])
+fn exec_stage(db: &Db, cache: &Cache, stage: &[&PlanNode])
               -> Result<Vec<(ColumnName, Filtered)>, Error> {
     let (tx, rx) = mpsc::channel();
 
@@ -160,10 +160,10 @@ pub fn exec(db: &Db, plan: &Plan) -> Result<Vec<(ColumnName, Data)>, Error> {
     let mut cache = Cache::new(db);
     let mut result = vec![];
 
-    let stage_query_nodes = plan.stage_query_nodes();
+    let stage_plan_nodes = plan.stage_plan_nodes();
 
-    for query_nodes in &stage_query_nodes {
-        for (name, filtered) in try!(exec_stage(db, &cache, query_nodes)) {
+    for nodes in &stage_plan_nodes {
+        for (name, filtered) in try!(exec_stage(db, &cache, nodes)) {
             match filtered {
                 Filtered::Ids(ids) => cache.insert_or_merge(name, ids),
                 Filtered::Data(data) => result.push((name, data)),

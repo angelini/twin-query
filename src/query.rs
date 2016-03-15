@@ -73,81 +73,45 @@ pub enum QueryLine {
 }
 
 #[derive(Debug, Clone)]
-pub enum QueryNode {
+pub enum PlanNode {
     Empty,
     Select(ColumnName, usize),
     Join(ColumnName, ColumnName),
     Where(ColumnName, Predicate),
 }
 
-impl fmt::Display for QueryNode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            QueryNode::Select(ref col_name, limit) => write!(f, "Select({}, {})", col_name, limit),
-            QueryNode::Join(ref left, ref right) => write!(f, "Join({}, {})", left, right),
-            QueryNode::Where(ref col_name, ref pred) => {
-                write!(f, "Where({}, {:?})", col_name, pred)
-            }
-            QueryNode::Empty => write!(f, "Empty()"),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct PlanNode {
-    query: QueryNode,
-    requires: Option<HashSet<ColumnName>>,
-    provide: Option<ColumnName>,
-}
-
-impl PlanNode {
-    fn from_query_node(node: QueryNode) -> PlanNode {
-        let mut set = HashSet::new();
-        let requires = match node {
-            QueryNode::Select(ref name, _) => {
-                set.insert(name.id());
-                Some(set)
-            }
-            QueryNode::Join(ref left, _) => {
-                set.insert(left.id());
-                Some(set)
-            }
-            _ => None,
-        };
-
-        let provide = match node {
-            QueryNode::Join(_, ref right) => Some(right.id()),
-            QueryNode::Where(ref left, _) => Some(left.id()),
-            _ => None,
-        };
-
-        PlanNode {
-            query: node,
-            requires: requires,
-            provide: provide,
-        }
-    }
-}
-
 impl fmt::Display for PlanNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.query)
+        match *self {
+            PlanNode::Select(ref col_name, limit) => write!(f, "Select({}, {})", col_name, limit),
+            PlanNode::Join(ref left, ref right) => write!(f, "Join({}, {})", left, right),
+            PlanNode::Where(ref col_name, ref pred) => write!(f, "Where({}, {:?})", col_name, pred),
+            PlanNode::Empty => write!(f, "Empty()"),
+        }
     }
 }
 
-fn parse_line(line: QueryLine, limit: usize) -> Vec<PlanNode> {
+fn parse_line(line: QueryLine, limit: usize)
+              -> Vec<(PlanNode, Option<ColumnName>, Option<ColumnName>)> {
     match line {
         QueryLine::Select(cols) => {
             cols.into_iter()
-                .map(|col| PlanNode::from_query_node(QueryNode::Select(col, limit)))
+                .map(|col| {
+                    let col_id = col.id();
+                    (PlanNode::Select(col, limit), Some(col_id), None)
+                })
                 .collect()
         }
         QueryLine::Where(left, pred) => {
-            vec![PlanNode::from_query_node(QueryNode::Where(left, pred))]
+            let left_id = left.id();
+            vec![(PlanNode::Where(left, pred), None, Some(left_id))]
         }
         QueryLine::Join(left, right) => {
             let left_id = ColumnName::new(left, "id".to_owned());
-            vec![PlanNode::from_query_node(QueryNode::Join(left_id, right))]
+            let right_id = right.id();
+            vec![(PlanNode::Join(left_id.clone(), right),
+                  Some(left_id),
+                  Some(right_id))]
         }
         QueryLine::Limit => vec![],
     }
@@ -212,12 +176,12 @@ impl Plan {
         Ok(())
     }
 
-    pub fn stage_query_nodes(&self) -> Vec<Vec<&QueryNode>> {
+    pub fn stage_plan_nodes(&self) -> Vec<Vec<&PlanNode>> {
         self.stages
             .iter()
             .map(|stage| {
                 stage.iter()
-                     .map(|node_index| &self.graph[node_index.to_owned()].query)
+                     .map(|node_index| &self.graph[node_index.to_owned()])
                      .collect()
             })
             .collect()
@@ -230,11 +194,10 @@ impl Plan {
             for (node_index, col_name, predicate, to_remove) in groups {
                 for rem in to_remove {
                     stage.remove(&rem);
-                    self.graph[rem].query = QueryNode::Empty;
+                    self.graph[rem] = PlanNode::Empty;
                 }
 
-                let mut node = &mut self.graph[node_index];
-                node.query = QueryNode::Where(col_name, predicate);
+                self.graph[node_index] = PlanNode::Where(col_name, predicate);
             }
         }
     }
@@ -249,8 +212,8 @@ impl Plan {
                 continue;
             };
 
-            let (col_name, predicate) = match graph[node_index].query {
-                QueryNode::Where(ref col_name, ref predicate) => (col_name, predicate),
+            let (col_name, predicate) = match graph[node_index] {
+                PlanNode::Where(ref col_name, ref predicate) => (col_name, predicate),
                 _ => continue,
             };
 
@@ -262,8 +225,8 @@ impl Plan {
                     continue;
                 }
 
-                let (inner_col, inner_pred) = match graph[inner_index].query {
-                    QueryNode::Where(ref inner_col, ref inner_pred) => (inner_col, inner_pred),
+                let (inner_col, inner_pred) = match graph[inner_index] {
+                    PlanNode::Where(ref inner_col, ref inner_pred) => (inner_col, inner_pred),
                     _ => continue,
                 };
 
@@ -290,12 +253,11 @@ impl Plan {
             .map(|stage| {
                 let mut stage_types = HashSet::new();
                 for node_index in stage {
-                    let plan_node = &self.graph[*node_index];
-                    match plan_node.query {
-                        QueryNode::Select(_, _) => stage_types.insert(1),
-                        QueryNode::Join(_, _) => stage_types.insert(2),
-                        QueryNode::Where(_, _) => stage_types.insert(3),
-                        QueryNode::Empty => stage_types.insert(4),
+                    match self.graph[*node_index] {
+                        PlanNode::Select(_, _) => stage_types.insert(1),
+                        PlanNode::Join(_, _) => stage_types.insert(2),
+                        PlanNode::Where(_, _) => stage_types.insert(3),
+                        PlanNode::Empty => stage_types.insert(4),
                     };
                 }
                 stage_types
@@ -312,17 +274,18 @@ impl Plan {
                 _ => acc,
             }
         });
-        let node_indices = lines.into_iter()
-                                .flat_map(|line| parse_line(line, limit))
-                                .map(|node| (graph.add_node(node.clone()), node))
-                                .collect::<Vec<(NodeIndex, PlanNode)>>();
+        let node_indices =
+            lines.into_iter()
+                 .flat_map(|line| parse_line(line, limit))
+                 .map(|(node, require, provide)| (graph.add_node(node.clone()), require, provide))
+                 .collect::<Vec<(NodeIndex, Option<ColumnName>, Option<ColumnName>)>>();
 
-        for &(node_index, ref node) in &node_indices {
-            for &(inner_index, ref inner) in &node_indices {
-                match (&node.requires, &inner.provide) {
+        for &(node_index, ref req, _) in &node_indices {
+            for &(inner_index, _, ref prov) in &node_indices {
+                match (req, prov) {
                     (&Some(ref r), &Some(ref p)) => {
-                        if r.contains(&p) {
-                            graph.add_edge(node_index, inner_index, inner.provide.clone().unwrap());
+                        if r == p {
+                            graph.add_edge(node_index, inner_index, prov.clone().unwrap());
                         }
                     }
                     _ => continue,
