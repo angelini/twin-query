@@ -65,12 +65,12 @@ pub fn print_table(cols: Vec<(&ColumnName, &Data)>, limit: usize) {
 pub fn start_repl(path: &str) {
     let history_path = Path::new("./.history");
     let mut start = time::precise_time_s();
-    let db = Db::from_file(path).expect("Cannot load db from file");
+    let db = Db::from_file(path).expect("Failed to load db from file");
     println!("\nload time: {:?}", time::precise_time_s() - start);
 
     mgmt::init();
     if history_path.exists() {
-        histfile::read(Some(history_path)).expect("Cannot read history");
+        histfile::read(Some(history_path)).expect("Failed to read history");
     }
 
     loop {
@@ -82,8 +82,8 @@ pub fn start_repl(path: &str) {
             process::exit(0);
         };
 
-        listmgmt::add(&query_raw).expect("Cannot save history");
-        histfile::write(Some(history_path)).expect("Cannot write history");
+        listmgmt::add(&query_raw).expect("Failed to save history");
+        histfile::write(Some(history_path)).expect("Failed to write history");
 
         start = time::precise_time_s();
         let plan = match Plan::from_str(&query_raw) {

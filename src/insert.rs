@@ -70,14 +70,14 @@ fn read_schema(schema_path: &str) -> Schema {
 }
 
 pub fn add_to_db(file_path: &str, schema_path: &str, csv_path: &str) {
-    let mut db = Db::from_file(file_path).expect("Cannot load db from file");
+    let mut db = Db::from_file(file_path).expect("Failed to load db from file");
 
     let schema = read_schema(schema_path);
     let time_index = schema.time_index();
 
     for (column_name, column_type) in schema.columns {
         db.add_column(column_name, column_type)
-          .expect("Could not add column");
+          .expect("Failed to add column to db");
     }
 
     let mut rdr = csv::Reader::from_file(csv_path)
@@ -90,12 +90,12 @@ pub fn add_to_db(file_path: &str, schema_path: &str, csv_path: &str) {
         let time = row.get(time_index).unwrap().parse::<usize>().unwrap();
 
         for (name, value) in schema.csv_ordering.iter().zip(row.iter()) {
-            db.add_datum(&name, id, value.to_owned(), time).expect("Could not add to db");
+            db.add_datum(&name, id, value.to_owned(), time).expect("Failed to add datum to db");
             count += 1;
         }
     }
 
     println!("added {:?} datums", count);
     db.optimize_columns();
-    db.write(file_path).expect("Could not write db to disk");
+    db.write(file_path).expect("Failed to write db to disk");
 }

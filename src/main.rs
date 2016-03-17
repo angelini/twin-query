@@ -31,9 +31,9 @@ use query::Plan;
 fn exec_query(file_path: &str, query_raw: &str) {
     let query = query_raw.replace("\\n", "\n");
 
-    let db = Db::from_file(file_path).expect("Cannot load db from file");
-    let plan = Plan::from_str(&query).expect("Cannot parse query");
-    let result = exec::exec(&db, &plan).expect("Cannot exec query");
+    let db = Db::from_file(file_path).expect("Failed to load db from file");
+    let plan = Plan::from_str(&query).expect("Failed to parse query");
+    let result = exec::exec(&db, &plan).expect("Failed to exec query");
 
     repl::print_table(result.iter()
                             .map(|&(ref n, ref e)| (n, e))
