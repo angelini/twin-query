@@ -53,8 +53,10 @@ pub fn print_table(cols: Vec<(&ColumnName, &Data)>, limit: usize) {
     for i in 0..cmp::min(limit, max_col_len) {
         let mut row = vec![];
         for &(_, ref data) in &cols {
-            let datum = data.get(i).unwrap();
-            row.push(Cell::new(&format!("{}", datum)));
+            match data.get(i) {
+                Some(d) => row.push(Cell::new(&format!("{}", d))),
+                None => row.push(Cell::new(" ")),
+            }
         }
         table.add_row(Row::new(row));
     }
