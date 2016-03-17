@@ -1,42 +1,75 @@
 use csv;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::Read;
 use toml;
 
 use data::{ColumnName, ColumnType, Db};
 
+#[derive(Debug)]
+enum Error {
+    MissingId,
+    MissingTime,
+    InvalidOrdering,
+}
+
 #[derive(Debug, RustcEncodable, RustcDecodable)]
 struct RawSchema {
     table: String,
     columns: HashMap<String, String>,
-    time_column: String,
     csv_ordering: Vec<String>,
+}
+
+impl RawSchema {
+    fn add_column(&mut self, name: &str, t: &str) {
+        self.columns.insert(name.to_owned(), t.to_owned());
+    }
 }
 
 #[derive(Debug)]
 struct Schema {
     table: String,
     columns: HashMap<ColumnName, ColumnType>,
-    time_column: ColumnName,
     csv_ordering: Vec<ColumnName>,
 }
 
 impl Schema {
-    fn new(raw: RawSchema) -> Schema {
-        Schema {
+    fn from_raw(mut raw: RawSchema) -> Result<Schema, Error> {
+        raw.add_column("id", "Int");
+        raw.add_column("time", "Int");
+        let ordering_set = raw.csv_ordering.iter().map(|s| s.as_str()).collect::<HashSet<&str>>();
+
+        for col in &raw.csv_ordering {
+            if !raw.columns.contains_key(col) {
+                return Err(Error::InvalidOrdering);
+            }
+        }
+
+        if raw.csv_ordering.len() != raw.columns.len() {
+            return Err(Error::InvalidOrdering);
+        }
+
+        if raw.csv_ordering.len() != ordering_set.len() {
+            return Err(Error::InvalidOrdering);
+        }
+
+        if !ordering_set.contains("id") {
+            return Err(Error::MissingId);
+        }
+
+        if !ordering_set.contains("time") {
+            return Err(Error::MissingTime);
+        }
+
+        Ok(Schema {
             table: raw.table.to_owned(),
             columns: Self::column_names_and_types(&raw.table, raw.columns),
-            time_column: ColumnName::new(raw.table.to_owned(), raw.time_column),
-            csv_ordering: Self::ordering(&raw.table, raw.csv_ordering),
-        }
+            csv_ordering: Self::ordering(&raw.table, raw.csv_ordering.clone()),
+        })
     }
 
-    fn time_index(&self) -> usize {
-        match self.csv_ordering.iter().position(|c| c == &self.time_column) {
-            Some(i) => i,
-            None => panic!("Time index not found"),
-        }
+    fn column_index(&self, col: &str) -> Option<usize> {
+        self.csv_ordering.iter().position(|c| c.column == col)
     }
 
     fn column_names_and_types(table: &str, raw: HashMap<String, String>)
@@ -56,7 +89,7 @@ impl Schema {
     }
 
     fn ordering(table: &str, raw: Vec<String>) -> Vec<ColumnName> {
-        raw.iter().map(|col| ColumnName::new(table.to_owned(), col.to_owned())).collect()
+        raw.into_iter().map(|col| ColumnName::new(table.to_owned(), col)).collect()
     }
 }
 
@@ -66,14 +99,15 @@ fn read_schema(schema_path: &str) -> Schema {
         .and_then(|mut f| f.read_to_string(&mut contents))
         .unwrap();
 
-    Schema::new(toml::decode_str(&contents).unwrap())
+    Schema::from_raw(toml::decode_str(&contents).unwrap()).expect("Invalid schema")
 }
 
 pub fn add_to_db(file_path: &str, schema_path: &str, csv_path: &str) {
     let mut db = Db::from_file(file_path).expect("Failed to load db from file");
 
     let schema = read_schema(schema_path);
-    let time_index = schema.time_index();
+    let id_index = schema.column_index("id").expect("`id` column not found");
+    let time_index = schema.column_index("time").expect("`time` column not found");
 
     for (column_name, column_type) in schema.columns {
         db.add_column(column_name, column_type)
@@ -86,7 +120,7 @@ pub fn add_to_db(file_path: &str, schema_path: &str, csv_path: &str) {
 
     let mut count = 0;
     for row in rdr.records().map(|r| r.unwrap()) {
-        let id = db.next_id(&schema.table);
+        let id = row.get(id_index).unwrap().parse::<usize>().unwrap();
         let time = row.get(time_index).unwrap().parse::<usize>().unwrap();
 
         for (name, value) in schema.csv_ordering.iter().zip(row.iter()) {

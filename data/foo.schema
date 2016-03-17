@@ -1,8 +1,6 @@
 table = "foo"
-time_column = "a"
-csv_ordering = ["a", "b", "c"]
+csv_ordering = ["id", "time", "a", "b"]
 
 [columns]
-a = "Int"
+a = "String"
 b = "Bool"
-c = "String"

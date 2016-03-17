@@ -20,6 +20,7 @@
 
 * Query Optimizer
 ** TODO Prune unenecessary query nodes
+** TODO Add time constraints to Where
 ** DONE Group operations on same stage
 
 * Query Execution

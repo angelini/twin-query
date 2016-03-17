@@ -238,7 +238,6 @@ impl Column {
 pub struct Db {
     pub cols: HashMap<ColumnName, Column>,
     pub ids: HashMap<String, Ids>,
-    entity_count: usize,
 }
 
 impl Db {
@@ -246,7 +245,6 @@ impl Db {
         Db {
             cols: HashMap::new(),
             ids: HashMap::new(),
-            entity_count: 0,
         }
     }
 
@@ -273,16 +271,6 @@ impl Db {
         Ok(())
     }
 
-    pub fn next_id(&mut self, table: &str) -> usize {
-        let ids = self.ids.get_mut(table).expect(&format!("Cannot find table {}", table));
-        let next = self.entity_count;
-
-        self.entity_count += 1;
-        ids.insert(next);
-
-        next
-    }
-
     pub fn add_column(&mut self, name: ColumnName, t: ColumnType) -> Result<(), Error> {
         match self.cols.get(&name) {
             Some(_) => Err(Error::NameAlreadyTake(name)),
@@ -296,11 +284,14 @@ impl Db {
 
     pub fn add_datum(&mut self, name: &ColumnName, id: usize, value: String, time: usize)
                      -> Result<(), Error> {
-        let mut col = match self.cols.get_mut(name) {
-            Some(c) => c,
-            None => return Err(Error::NameNotFound(name.to_owned())),
+        let (mut col, mut ids) = match (self.cols.get_mut(name), self.ids.get_mut(&name.table)) {
+            (Some(c), Some(i)) => (c, i),
+            _ => return Err(Error::NameNotFound(name.to_owned())),
         };
-        col.add_datum(id, value, time)
+
+        try!(col.add_datum(id, value, time));
+        ids.insert(id);
+        Ok(())
     }
 
     #[allow(for_kv_map)]

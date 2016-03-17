@@ -1,4 +1,4 @@
-1,true,first
-2,true,second
-3,false,third
-4,false,fourth
+1,0,first,true
+2,0,second,true
+3,1,third,false
+4,3,fourth,false

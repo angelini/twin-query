@@ -1,9 +1,0 @@
-table = "csv"
-time_column = "year"
-csv_ordering = ["name", "code", "year", "value"]
-
-[columns]
-name = "String"
-code = "String"
-year = "Int"
-value = "String"

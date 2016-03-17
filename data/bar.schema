@@ -1,9 +1,7 @@
 table = "bar"
-time_column = "a"
-csv_ordering = ["a", "b", "c", "foo"]
+csv_ordering = ["id", "time", "c", "d", "foo"]
 
 [columns]
-a = "Int"
-b = "Bool"
-c = "String"
+c = "Int"
+d = "Bool"
 foo = "Int"
