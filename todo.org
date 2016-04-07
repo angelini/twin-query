@@ -13,7 +13,7 @@
 ** DONE Sort columns by time
 
 * Data Insert
-** TODO Add id_column
+** DONE Add id_column
 
 * Query Validator
 ** DONE Query node ordering
@@ -24,7 +24,7 @@
 ** DONE Group operations on same stage
 
 * Query Execution
-** TODO Filter by id
+** DONE Filter by id
 ** DONE Use column ids as roots of query cache
 
 * Execution Optimizer

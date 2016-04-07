@@ -10,7 +10,7 @@ use data::{ColumnName, Value};
 
 peg_file! grammar("grammar.rustpeg");
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Comparator {
     Equal,
     Greater,
@@ -78,6 +78,7 @@ pub enum PlanNode {
     Select(ColumnName, usize),
     Join(ColumnName, ColumnName),
     Where(ColumnName, Predicate),
+    WhereId(ColumnName, usize),
 }
 
 impl fmt::Display for PlanNode {
@@ -86,13 +87,16 @@ impl fmt::Display for PlanNode {
             PlanNode::Select(ref col_name, limit) => write!(f, "Select({}, {})", col_name, limit),
             PlanNode::Join(ref left, ref right) => write!(f, "Join({}, {})", left, right),
             PlanNode::Where(ref col_name, ref pred) => write!(f, "Where({}, {:?})", col_name, pred),
+            PlanNode::WhereId(ref col_name, id) => write!(f, "WhereId({}, {})", col_name, id),
             PlanNode::Empty => write!(f, "Empty()"),
         }
     }
 }
 
-fn parse_line(line: QueryLine, limit: usize)
-              -> Vec<(PlanNode, Option<ColumnName>, Option<ColumnName>)> {
+type Requires = Option<ColumnName>;
+type Provides = Option<ColumnName>;
+
+fn parse_line(line: QueryLine, limit: usize) -> Vec<(PlanNode, Requires, Provides)> {
     match line {
         QueryLine::Select(cols) => {
             cols.into_iter()
@@ -104,7 +108,17 @@ fn parse_line(line: QueryLine, limit: usize)
         }
         QueryLine::Where(left, pred) => {
             let left_id = left.id();
-            vec![(PlanNode::Where(left, pred), None, Some(left_id))]
+            let node = match pred {
+                Predicate::Constant(Comparator::Equal, Value::Int(val)) => {
+                    if left_id == left {
+                        PlanNode::WhereId(left, val)
+                    } else {
+                        PlanNode::Where(left, pred)
+                    }
+                }
+                _ => PlanNode::Where(left, pred),
+            };
+            vec![(node, None, Some(left_id))]
         }
         QueryLine::Join(left, right) => {
             let left_id = ColumnName::new(left, "id".to_owned());
@@ -160,16 +174,17 @@ impl Plan {
         let stages_len = stage_query_types.len();
 
         for (index, types) in stage_query_types.iter().enumerate() {
-            if index == stages_len - 1 && (types.contains(&2) || types.contains(&3)) {
+            if types.contains(&0) {
+                return Err(Error::EmptyNodeInStages);
+            }
+
+            if index == stages_len - 1 &&
+               (types.contains(&2) || types.contains(&3) || types.contains(&4)) {
                 return Err(Error::InvalidStageOrder);
             }
 
             if index < stages_len - 1 && types.contains(&1) {
                 return Err(Error::InvalidStageOrder);
-            }
-
-            if types.contains(&4) {
-                return Err(Error::EmptyNodeInStages);
             }
         }
 
@@ -254,10 +269,11 @@ impl Plan {
                 let mut stage_types = HashSet::new();
                 for node_index in stage {
                     match self.graph[*node_index] {
+                        PlanNode::Empty => stage_types.insert(0),
                         PlanNode::Select(_, _) => stage_types.insert(1),
                         PlanNode::Join(_, _) => stage_types.insert(2),
                         PlanNode::Where(_, _) => stage_types.insert(3),
-                        PlanNode::Empty => stage_types.insert(4),
+                        PlanNode::WhereId(_, _) => stage_types.insert(4),
                     };
                 }
                 stage_types

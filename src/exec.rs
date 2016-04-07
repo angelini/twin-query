@@ -130,6 +130,16 @@ fn find_data(db: &Db, cache: &Cache, node: &PlanNode) -> Result<(ColumnName, Fil
             Ok((left_id,
                 Filtered::Ids(match_by_predicate(&column.data, predicate))))
         }
+        PlanNode::WhereId(ref left, id) => {
+            let ids = try!(cache.get(left).ok_or(Error::MissingColumn(left.to_owned())));
+            let mut matched_ids = Ids::new();
+
+            if ids.contains(&id) {
+                matched_ids.insert(id);
+            }
+
+            Ok((left.to_owned(), Filtered::Ids(matched_ids)))
+        },
         PlanNode::Empty => panic!("Tried to execute empty node"),
     }
 }
