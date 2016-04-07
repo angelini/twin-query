@@ -78,7 +78,7 @@ pub enum PlanNode {
     Select(ColumnName, usize),
     Join(ColumnName, ColumnName),
     Where(ColumnName, Predicate),
-    WhereId(ColumnName, usize),
+    WhereId(ColumnName, Vec<usize>),
 }
 
 impl fmt::Display for PlanNode {
@@ -87,7 +87,9 @@ impl fmt::Display for PlanNode {
             PlanNode::Select(ref col_name, limit) => write!(f, "Select({}, {})", col_name, limit),
             PlanNode::Join(ref left, ref right) => write!(f, "Join({}, {})", left, right),
             PlanNode::Where(ref col_name, ref pred) => write!(f, "Where({}, {:?})", col_name, pred),
-            PlanNode::WhereId(ref col_name, id) => write!(f, "WhereId({}, {})", col_name, id),
+            PlanNode::WhereId(ref col_name, ref ids) => {
+                write!(f, "WhereId({}, {:?})", col_name, ids)
+            }
             PlanNode::Empty => write!(f, "Empty()"),
         }
     }
@@ -95,6 +97,22 @@ impl fmt::Display for PlanNode {
 
 type Requires = Option<ColumnName>;
 type Provides = Option<ColumnName>;
+
+fn extract_ids(predicate: &Predicate) -> Option<Vec<usize>> {
+    match *predicate {
+        Predicate::Constant(Comparator::Equal, Value::Int(val)) => Some(vec![val]),
+        Predicate::Or(ref left, ref right) => {
+            match (extract_ids(&left), extract_ids(&right)) {
+                (Some(mut left_ids), Some(mut right_ids)) => {
+                    left_ids.append(&mut right_ids);
+                    Some(left_ids)
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
 
 fn parse_line(line: QueryLine, limit: usize) -> Vec<(PlanNode, Requires, Provides)> {
     match line {
@@ -108,16 +126,15 @@ fn parse_line(line: QueryLine, limit: usize) -> Vec<(PlanNode, Requires, Provide
         }
         QueryLine::Where(left, pred) => {
             let left_id = left.id();
-            let node = match pred {
-                Predicate::Constant(Comparator::Equal, Value::Int(val)) => {
-                    if left_id == left {
-                        PlanNode::WhereId(left, val)
-                    } else {
-                        PlanNode::Where(left, pred)
-                    }
+            let node = if left == left_id {
+                match extract_ids(&pred) {
+                    Some(ids) => PlanNode::WhereId(left, ids),
+                    None => PlanNode::Where(left, pred),
                 }
-                _ => PlanNode::Where(left, pred),
+            } else {
+                PlanNode::Where(left, pred)
             };
+
             vec![(node, None, Some(left_id))]
         }
         QueryLine::Join(left, right) => {
