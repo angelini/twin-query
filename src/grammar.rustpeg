@@ -1,5 +1,5 @@
 use data::{ColumnName, Value};
-use query::{Comparator, Predicate, QueryLine};
+use plan::{Comparator, Predicate, QueryLine};
 
 #[pub]
 query -> Vec<QueryLine>
@@ -46,9 +46,9 @@ bool -> bool
   / "false" { false }
 
 string_with_whitespace -> String
-  = [a-zA-Z0-9 ]+ { match_str.to_owned() }
+  = [a-zA-Z0-9_ ]+ { match_str.to_owned() }
 
 string -> String
-  = [a-zA-Z0-9]+ { match_str.to_owned() }
+  = [a-zA-Z0-9_]+ { match_str.to_owned() }
 
 __ = " "*

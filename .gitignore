@@ -6,6 +6,3 @@ data/*
 !data/bar.schema
 !data/bar.csv
 !data/sample.db
-!data/gdp.csv
-!data/gdp.db
-!data/gdp.schema
