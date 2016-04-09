@@ -72,25 +72,29 @@ pub enum QueryLine {
     Limit(usize),
 }
 
+pub type TimeBound = Option<[usize; 2]>;
+
 #[derive(Debug, Clone)]
 pub enum PlanNode {
     Empty,
     Select(ColumnName, usize),
     Join(ColumnName, ColumnName),
-    Where(ColumnName, Predicate),
+    Where(ColumnName, Predicate, TimeBound),
     WhereId(ColumnName, Vec<usize>),
 }
 
 impl fmt::Display for PlanNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
+            PlanNode::Empty => write!(f, "Empty()"),
             PlanNode::Select(ref col_name, limit) => write!(f, "Select({}, {})", col_name, limit),
             PlanNode::Join(ref left, ref right) => write!(f, "Join({}, {})", left, right),
-            PlanNode::Where(ref col_name, ref pred) => write!(f, "Where({}, {:?})", col_name, pred),
+            PlanNode::Where(ref col_name, ref pred, ref bound) => {
+                write!(f, "Where({}, {:?}, {:?})", col_name, pred, bound)
+            }
             PlanNode::WhereId(ref col_name, ref ids) => {
                 write!(f, "WhereId({}, {:?})", col_name, ids)
             }
-            PlanNode::Empty => write!(f, "Empty()"),
         }
     }
 }
@@ -129,16 +133,16 @@ fn parse_line(line: QueryLine, limit: usize) -> Vec<(PlanNode, Requires, Provide
             let node = if left == left_id {
                 match extract_ids(&pred) {
                     Some(ids) => PlanNode::WhereId(left, ids),
-                    None => PlanNode::Where(left, pred),
+                    None => PlanNode::Where(left, pred, None),
                 }
             } else {
-                PlanNode::Where(left, pred)
+                PlanNode::Where(left, pred, None)
             };
 
             vec![(node, None, Some(left_id))]
         }
-        QueryLine::Join(left, right) => {
-            let left_id = ColumnName::new(left, "id".to_owned());
+        QueryLine::Join(left_table, right) => {
+            let left_id = ColumnName::new(left_table, "id".to_owned());
             let right_id = right.id();
             vec![(PlanNode::Join(left_id.clone(), right),
                   Some(left_id),
@@ -229,7 +233,25 @@ impl Plan {
                     self.graph[rem] = PlanNode::Empty;
                 }
 
-                self.graph[node_index] = PlanNode::Where(col_name, predicate);
+                self.graph[node_index] = PlanNode::Where(col_name, predicate, None);
+            }
+        }
+
+        for stage in &mut self.stages {
+            let time_bounds = Self::extract_time_bounds(&self.graph, stage);
+
+            for (time_bound, to_bound, to_remove) in time_bounds {
+                stage.remove(&to_remove);
+                self.graph[to_remove] = PlanNode::Empty;
+
+                for bound in to_bound {
+                    self.graph[bound] = match self.graph[bound] {
+                        PlanNode::Where(ref col, ref pred, None) => {
+                            PlanNode::Where(col.clone(), pred.clone(), time_bound)
+                        }
+                        _ => panic!("Invalid time bound node"),
+                    }
+                }
             }
         }
     }
@@ -245,7 +267,7 @@ impl Plan {
             };
 
             let (col_name, predicate) = match graph[node_index] {
-                PlanNode::Where(ref col_name, ref predicate) => (col_name, predicate),
+                PlanNode::Where(ref col_name, ref predicate, _) => (col_name, predicate),
                 _ => continue,
             };
 
@@ -258,7 +280,7 @@ impl Plan {
                 }
 
                 let (inner_col, inner_pred) = match graph[inner_index] {
-                    PlanNode::Where(ref inner_col, ref inner_pred) => (inner_col, inner_pred),
+                    PlanNode::Where(ref inner_col, ref inner_pred, _) => (inner_col, inner_pred),
                     _ => continue,
                 };
 
@@ -279,6 +301,11 @@ impl Plan {
         groups
     }
 
+    fn extract_time_bounds(graph: &Graph<PlanNode, ColumnName>, stage: &NodeIndices)
+                           -> Vec<(TimeBound, NodeIndices, NodeIndex)> {
+        unimplemented!()
+    }
+
     fn stage_query_types(&self) -> Vec<HashSet<usize>> {
         self.stages
             .iter()
@@ -289,7 +316,7 @@ impl Plan {
                         PlanNode::Empty => stage_types.insert(0),
                         PlanNode::Select(_, _) => stage_types.insert(1),
                         PlanNode::Join(_, _) => stage_types.insert(2),
-                        PlanNode::Where(_, _) => stage_types.insert(3),
+                        PlanNode::Where(_, _, _) => stage_types.insert(3),
                         PlanNode::WhereId(_, _) => stage_types.insert(4),
                     };
                 }

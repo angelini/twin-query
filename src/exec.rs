@@ -123,7 +123,7 @@ fn find_data(db: &Db, cache: &Cache, node: &PlanNode) -> Result<(ColumnName, Fil
                 _ => Err(Error::InvalidJoin(right.to_owned())),
             }
         }
-        PlanNode::Where(ref left, ref predicate) => {
+        PlanNode::Where(ref left, ref predicate, _) => {
             let left_id = left.id();
             let column = try!(db.cols.get(left).ok_or(Error::MissingColumn(left.to_owned())));
 
