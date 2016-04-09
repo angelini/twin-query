@@ -139,11 +139,10 @@ fn find_data(db: &Db, cache: &Cache, node: &PlanNode) -> Result<(ColumnName, Fil
 
             Ok((left.to_owned(), Filtered::Ids(matched_ids)))
         }
-        PlanNode::Empty => panic!("Tried to execute empty node"),
     }
 }
 
-fn exec_stage(db: &Db, cache: &Cache, stage: &[&PlanNode])
+fn exec_stage(db: &Db, cache: &Cache, stage: &[PlanNode])
               -> Result<Vec<(ColumnName, Filtered)>, Error> {
     let (tx, rx) = mpsc::channel();
 
@@ -169,10 +168,8 @@ pub fn exec(db: &Db, plan: &Plan) -> Result<Vec<(ColumnName, Data)>, Error> {
     let mut cache = Cache::new(db);
     let mut result = vec![];
 
-    let stage_plan_nodes = plan.stage_plan_nodes();
-
-    for nodes in &stage_plan_nodes {
-        for (name, filtered) in try!(exec_stage(db, &cache, nodes)) {
+    for stage in &plan.stages {
+        for (name, filtered) in try!(exec_stage(db, &cache, stage)) {
             match filtered {
                 Filtered::Ids(ids) => cache.insert_or_merge(name, ids),
                 Filtered::Data(data) => result.push((name, data)),

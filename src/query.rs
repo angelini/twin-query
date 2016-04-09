@@ -1,5 +1,4 @@
 use petgraph::{Dfs, EdgeDirection, Graph};
-use petgraph::dot::Dot;
 use petgraph::graph::NodeIndex;
 use std::cmp;
 use std::collections::HashSet;
@@ -31,7 +30,7 @@ impl Comparator {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Predicate {
     Constant(Comparator, Value),
     And(Box<Predicate>, Box<Predicate>),
@@ -72,9 +71,8 @@ pub enum QueryLine {
     Limit(usize),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum PlanNode {
-    Empty,
     Select(ColumnName, usize),
     Join(ColumnName, ColumnName),
     Where(ColumnName, Predicate),
@@ -90,7 +88,6 @@ impl fmt::Display for PlanNode {
             PlanNode::WhereId(ref col_name, ref ids) => {
                 write!(f, "WhereId({}, {:?})", col_name, ids)
             }
-            PlanNode::Empty => write!(f, "Empty()"),
         }
     }
 }
@@ -161,19 +158,14 @@ pub enum Error {
 
 #[derive(Debug)]
 pub struct Plan {
-    graph: Graph<PlanNode, ColumnName>,
-    stages: Vec<NodeIndices>,
+    pub stages: Vec<Vec<PlanNode>>,
 }
 
 impl Plan {
     pub fn new(lines: Vec<QueryLine>) -> Plan {
         let graph = Self::build_graph(lines);
         let stages = Self::build_stages(&graph);
-        let mut plan = Plan {
-            graph: graph,
-            stages: stages,
-        };
-
+        let mut plan = Plan { stages: stages };
         plan.optimize();
         plan
     }
@@ -208,96 +200,6 @@ impl Plan {
         Ok(())
     }
 
-    pub fn stage_plan_nodes(&self) -> Vec<Vec<&PlanNode>> {
-        self.stages
-            .iter()
-            .map(|stage| {
-                stage.iter()
-                     .map(|node_index| &self.graph[node_index.to_owned()])
-                     .collect()
-            })
-            .collect()
-    }
-
-    fn optimize(&mut self) {
-        for stage in &mut self.stages {
-            let groups = Self::group_nodes(&self.graph, stage);
-
-            for (node_index, col_name, predicate, to_remove) in groups {
-                for rem in to_remove {
-                    stage.remove(&rem);
-                    self.graph[rem] = PlanNode::Empty;
-                }
-
-                self.graph[node_index] = PlanNode::Where(col_name, predicate);
-            }
-        }
-    }
-
-    fn group_nodes(graph: &Graph<PlanNode, ColumnName>, stage: &NodeIndices)
-                   -> Vec<(NodeIndex, ColumnName, Predicate, NodeIndices)> {
-        let mut groups = vec![];
-        let mut already_matched: HashSet<NodeIndex> = HashSet::new();
-
-        for &node_index in stage.iter() {
-            if already_matched.contains(&node_index) {
-                continue;
-            };
-
-            let (col_name, predicate) = match graph[node_index] {
-                PlanNode::Where(ref col_name, ref predicate) => (col_name, predicate),
-                _ => continue,
-            };
-
-            let mut predicate = predicate.to_owned();
-            let mut similar = HashSet::new();
-
-            for &inner_index in stage.iter() {
-                if node_index == inner_index {
-                    continue;
-                }
-
-                let (inner_col, inner_pred) = match graph[inner_index] {
-                    PlanNode::Where(ref inner_col, ref inner_pred) => (inner_col, inner_pred),
-                    _ => continue,
-                };
-
-                if col_name != inner_col {
-                    continue;
-                }
-
-                already_matched.insert(inner_index);
-                similar.insert(inner_index);
-                predicate = Predicate::And(Box::new(predicate), Box::new(inner_pred.to_owned()));
-            }
-
-            if similar.len() > 0 {
-                groups.push((node_index, col_name.clone(), predicate, similar))
-            }
-        }
-
-        groups
-    }
-
-    fn stage_query_types(&self) -> Vec<HashSet<usize>> {
-        self.stages
-            .iter()
-            .map(|stage| {
-                let mut stage_types = HashSet::new();
-                for node_index in stage {
-                    match self.graph[*node_index] {
-                        PlanNode::Empty => stage_types.insert(0),
-                        PlanNode::Select(_, _) => stage_types.insert(1),
-                        PlanNode::Join(_, _) => stage_types.insert(2),
-                        PlanNode::Where(_, _) => stage_types.insert(3),
-                        PlanNode::WhereId(_, _) => stage_types.insert(4),
-                    };
-                }
-                stage_types
-            })
-            .collect()
-    }
-
     fn build_graph(lines: Vec<QueryLine>) -> Graph<PlanNode, ColumnName> {
         let mut graph = Graph::new();
 
@@ -329,7 +231,7 @@ impl Plan {
         graph
     }
 
-    fn build_stages(graph: &Graph<PlanNode, ColumnName>) -> Vec<NodeIndices> {
+    fn build_stages(graph: &Graph<PlanNode, ColumnName>) -> Vec<Vec<PlanNode>> {
         let mut stages = vec![];
 
         for external in graph.externals(EdgeDirection::Incoming) {
@@ -339,7 +241,7 @@ impl Plan {
                 let provides = graph.neighbors_directed(node, EdgeDirection::Incoming);
 
                 for provide in provides {
-                    match Self::find_stage_index(&stages, &provide) {
+                    match Self::find_stage_index(&stages, &graph[provide]) {
                         Some(stage_index) => max_depth = cmp::max(max_depth, stage_index as isize),
                         _ => continue,
                     }
@@ -348,9 +250,9 @@ impl Plan {
                 let stage_index = (max_depth + 1) as usize;
 
                 if stage_index >= stages.len() {
-                    stages.push(HashSet::new())
+                    stages.push(vec![])
                 }
-                stages[stage_index].insert(node);
+                stages[stage_index].push(graph[node].clone());
             }
         }
 
@@ -358,10 +260,111 @@ impl Plan {
         stages
     }
 
+    fn optimize(&mut self) {
+        self.stages = self.stages
+                          .iter()
+                          .map(|stage| Self::group_nodes_by_column_name(stage))
+                          .map(|groups| {
+                              groups.iter()
+                                    .map(|group| {
+                                        if group.len() == 1 {
+                                            group[0].clone()
+                                        } else {
+                                            Self::group_nodes_into_and_predicate(group)
+                                        }
+                                    })
+                                    .collect::<Vec<PlanNode>>()
+                          })
+                          .collect::<Vec<Vec<PlanNode>>>();
+    }
 
-    fn find_stage_index(stages: &[NodeIndices], node: &NodeIndex) -> Option<usize> {
+    fn group_nodes_by_column_name(stage: &[PlanNode]) -> Vec<Vec<&PlanNode>> {
+        let mut groups = vec![];
+        let mut already_matched: HashSet<usize> = HashSet::new();
+
+        for (idx, node) in stage.iter().enumerate() {
+            if already_matched.contains(&idx) {
+                continue;
+            }
+
+            let col_name = match *node {
+                PlanNode::Where(ref col_name, _) => col_name,
+                _ => {
+                    groups.push(vec![node]);
+                    continue;
+                }
+            };
+
+            let mut similar = vec![node];
+
+            for (inner_idx, inner_node) in stage.iter().skip(idx + 1).enumerate() {
+                let inner_col_name = match *inner_node {
+                    PlanNode::Where(ref inner_col, _) => inner_col,
+                    _ => continue,
+                };
+
+                if col_name != inner_col_name {
+                    continue;
+                }
+
+                already_matched.insert(inner_idx + idx + 1);
+                similar.push(inner_node);
+            }
+
+            groups.push(similar)
+        }
+
+        groups
+    }
+
+    fn group_nodes_into_and_predicate(group: &[&PlanNode]) -> PlanNode {
+        let mut col_name = None;
+        let mut predicate = None;
+
+        for node in group {
+            let (inner_col_name, inner_pred) = match **node {
+                PlanNode::Where(ref inner_c, ref inner_p) => (inner_c, inner_p),
+                _ => panic!("Grouped non-where node"),
+            };
+
+            col_name = match col_name {
+                Some(_) => col_name,
+                None => Some(inner_col_name.to_owned()),
+            };
+
+            predicate = match predicate {
+                Some(pred) => Some(Predicate::And(Box::new(pred), Box::new(inner_pred.to_owned()))),
+                None => Some(inner_pred.to_owned()),
+            }
+        }
+
+        match (col_name, predicate) {
+            (Some(c), Some(p)) => PlanNode::Where(c, p),
+            _ => panic!("Empty group"),
+        }
+    }
+
+    fn stage_query_types(&self) -> Vec<HashSet<usize>> {
+        self.stages
+            .iter()
+            .map(|stage| {
+                let mut stage_types = HashSet::new();
+                for node in stage {
+                    match *node {
+                        PlanNode::Select(_, _) => stage_types.insert(1),
+                        PlanNode::Join(_, _) => stage_types.insert(2),
+                        PlanNode::Where(_, _) => stage_types.insert(3),
+                        PlanNode::WhereId(_, _) => stage_types.insert(4),
+                    };
+                }
+                stage_types
+            })
+            .collect()
+    }
+
+    fn find_stage_index(stages: &[Vec<PlanNode>], node: &PlanNode) -> Option<usize> {
         for (idx, stage) in stages.iter().enumerate() {
-            if stage.contains(node) {
+            if let Some(_) = stage.iter().position(|n| n == node) {
                 return Some(idx);
             }
         }
@@ -385,15 +388,15 @@ impl fmt::Display for Plan {
         try!(write!(f, "Plan: "));
         for (idx, stage) in self.stages.iter().enumerate() {
             let s = stage.iter()
-                         .map(|i| format!("{}", self.graph[i.to_owned()]))
+                         .map(|node| format!("{}", node))
                          .collect::<Vec<String>>();
-            try!(write!(f, "[{}]", s.join(", ")));
 
-            if idx != self.stages.len() - 1 {
-                try!(write!(f, ", "));
+            if idx != 0 {
+                try!(write!(f, "      "));
             }
+            try!(write!(f, "[ {} ]\n", s.join(", ")));
         }
-        write!(f, "\n{}", Dot::new(&self.graph))
+        Ok(())
     }
 }
 
