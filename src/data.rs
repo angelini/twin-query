@@ -256,8 +256,8 @@ impl Db {
 
         let file = try!(File::open(file_path));
         let reader = io::BufReader::new(file);
-        let mut decoder = ZlibDecoder::new(reader);
-        let decoded = try!(serialize::decode_from(&mut decoder, SizeLimit::Infinite));
+        let mut zlib_decoder = ZlibDecoder::new(reader);
+        let decoded = try!(serialize::decode_from(&mut zlib_decoder, SizeLimit::Infinite));
 
         Ok(decoded)
     }
@@ -300,6 +300,12 @@ impl Db {
             col.sort();
             col.index_by_time()
         }
+    }
+}
+
+impl Default for Db {
+    fn default() -> Db {
+        Db::new()
     }
 }
 

@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::mpsc;
 
 use data::{ColumnName, Db, Ids, Data, Datum, Value};
-use query::{Plan, Predicate, PlanNode};
+use plan::{Plan, Predicate, PlanNode};
 
 struct Cache<'a> {
     db: &'a Db,

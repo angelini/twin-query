@@ -141,7 +141,7 @@ fn parse_line(line: QueryLine, limit: usize) -> Vec<(PlanNode, Requires, Provide
                   Some(left_id),
                   Some(right_id))]
         }
-        QueryLine::Limit => vec![],
+        QueryLine::Limit(_) => vec![],
     }
 }
 

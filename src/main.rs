@@ -19,14 +19,14 @@ extern crate toml;
 mod data;
 mod exec;
 mod insert;
-mod query;
+mod plan;
 mod repl;
 
 use clap::{App, SubCommand};
 use std::str::FromStr;
 
 use data::Db;
-use query::Plan;
+use plan::Plan;
 
 fn exec_query(file_path: &str, query_raw: &str) {
     let query = query_raw.replace("\\n", "\n");

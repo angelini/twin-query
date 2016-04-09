@@ -12,7 +12,7 @@ use time;
 
 use data::{ColumnName, Db, Data};
 use exec;
-use query::Plan;
+use plan::Plan;
 
 fn read_query_raw() -> String {
     let mut query = "".to_owned();
@@ -99,13 +99,6 @@ pub fn start_repl(path: &str) {
         println!("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n");
         println!("query parse time: {:?}\n", time::precise_time_s() - start);
         println!("{}", plan);
-
-        let names_and_data = db.cols
-                               .iter()
-                               .map(|(name, col)| (name, &col.data))
-                               .collect::<Vec<(&ColumnName, &Data)>>();
-        print_table(names_and_data, 20);
-        println!("");
 
         start = time::precise_time_s();
         match exec::exec(&db, &plan) {
