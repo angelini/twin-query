@@ -72,11 +72,67 @@ pub enum QueryLine {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+/// Open-closed interval
+/// min < time <= max
+pub struct TimeBound {
+    min: Option<usize>,
+    max: Option<usize>,
+}
+
+impl TimeBound {
+    fn from_predicate(predicate: &Predicate) -> Self {
+        match *predicate {
+            Predicate::Constant(ref comp, ref value) => {
+                let int_val = match *value {
+                    Value::Int(i) => i,
+                    _ => panic!("TimeBounds must be built with int predicates"),
+                };
+
+                let (min, max) = match *comp {
+                    Comparator::Equal => (Some(int_val - 1), Some(int_val)),
+                    Comparator::Greater => (Some(int_val), None),
+                    Comparator::GreaterOrEqual => (Some(int_val - 1), None),
+                    Comparator::Less => (None, Some(int_val - 1)),
+                    Comparator::LessOrEqual => (None, Some(int_val)),
+                };
+
+                TimeBound {
+                    min: min,
+                    max: max,
+                }
+            }
+            Predicate::And(ref left, ref right) => {
+                Self::from_predicate(left).combine(&Self::from_predicate(right))
+            }
+            Predicate::Or(_, _) => unimplemented!(),
+        }
+    }
+
+    fn combine(&self, bound: &TimeBound) -> TimeBound {
+        TimeBound {
+            min: self.min.or(bound.min),
+            max: self.max.or(bound.max),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum PlanNode {
     Select(ColumnName, usize),
     Join(ColumnName, ColumnName),
-    Where(ColumnName, Predicate),
+    Where(ColumnName, Predicate, Option<TimeBound>),
     WhereId(ColumnName, Vec<usize>),
+}
+
+impl PlanNode {
+    fn table(&self) -> &str {
+        match *self {
+            PlanNode::Select(ref col_name, _) |
+            PlanNode::Join(ref col_name, _) |
+            PlanNode::Where(ref col_name, _, _) |
+            PlanNode::WhereId(ref col_name, _) => &col_name.table,
+        }
+    }
 }
 
 impl fmt::Display for PlanNode {
@@ -84,7 +140,9 @@ impl fmt::Display for PlanNode {
         match *self {
             PlanNode::Select(ref col_name, limit) => write!(f, "Select({}, {})", col_name, limit),
             PlanNode::Join(ref left, ref right) => write!(f, "Join({}, {})", left, right),
-            PlanNode::Where(ref col_name, ref pred) => write!(f, "Where({}, {:?})", col_name, pred),
+            PlanNode::Where(ref col_name, ref pred, ref time_bound) => {
+                write!(f, "Where({}, {:?}, {:?})", col_name, pred, time_bound)
+            }
             PlanNode::WhereId(ref col_name, ref ids) => {
                 write!(f, "WhereId({}, {:?})", col_name, ids)
             }
@@ -126,10 +184,10 @@ fn parse_line(line: QueryLine, limit: usize) -> Vec<(PlanNode, Requires, Provide
             let node = if left == left_id {
                 match extract_ids(&pred) {
                     Some(ids) => PlanNode::WhereId(left, ids),
-                    None => PlanNode::Where(left, pred),
+                    None => PlanNode::Where(left, pred, None),
                 }
             } else {
-                PlanNode::Where(left, pred)
+                PlanNode::Where(left, pred, None)
             };
 
             vec![(node, None, Some(left_id))]
@@ -193,7 +251,7 @@ impl Stage {
 
         for node in &self.nodes {
             match *node {
-                PlanNode::Where(ref col_name, _) => {
+                PlanNode::Where(ref col_name, _, _) => {
                     let mut nodes = map.entry(col_name).or_insert_with(Vec::new);
                     nodes.push(node)
                 }
@@ -204,6 +262,25 @@ impl Stage {
         map.into_iter()
            .map(|(_, v)| v)
            .collect()
+    }
+
+    fn find_where_time_nodes(&self) -> Vec<&PlanNode> {
+        self.nodes
+            .iter()
+            .filter(|&node| {
+                match *node {
+                    PlanNode::Where(ref col_name, _, _) => &col_name.column == "time",
+                    _ => false,
+                }
+            })
+            .collect()
+    }
+
+    fn find_by_table(&self, table: &str) -> Vec<&PlanNode> {
+        self.nodes
+            .iter()
+            .filter(|node| node.table() == table)
+            .collect()
     }
 }
 
@@ -321,10 +398,14 @@ impl Plan {
     }
 
     fn optimize(&mut self) {
-        self.stages = self.stages.iter().map(Self::optimize_stage).collect::<Vec<Stage>>();
+        self.stages = self.stages
+                          .iter()
+                          .map(Self::combine_where_nodes_on_same_column)
+                          .map(|s| Self::set_time_bounds_on_where_nodes(&s))
+                          .collect::<Vec<Stage>>();
     }
 
-    fn optimize_stage(stage: &Stage) -> Stage {
+    fn combine_where_nodes_on_same_column(stage: &Stage) -> Stage {
         let mut new = stage.clone();
         let groups = stage.group_where_nodes_by_column();
 
@@ -337,13 +418,60 @@ impl Plan {
         new
     }
 
+    fn set_time_bounds_on_where_nodes(stage: &Stage) -> Stage {
+        let mut new = stage.clone();
+        let time_nodes = stage.find_where_time_nodes();
+
+        for time_node in time_nodes {
+            let (col_name, predicate) = match *time_node {
+                PlanNode::Where(ref col_name, ref predicate, _) => (col_name, predicate),
+                _ => panic!("Invalid time_node"),
+            };
+            let bound = TimeBound::from_predicate(predicate);
+            let group = stage.find_by_table(&col_name.table)
+                             .into_iter()
+                             .filter(|&node| {
+                                 match *node {
+                                     PlanNode::Where(_, _, _) => true,
+                                     _ => false,
+                                 }
+                             })
+                             .collect::<Vec<&PlanNode>>();
+
+            if group.len() == 1 {
+                new.replace(&[time_node],
+                            vec![PlanNode::Where(col_name.to_owned(),
+                                                 predicate.to_owned(),
+                                                 Some(bound))]);
+            } else {
+                let new_nodes = group.iter()
+                                     .filter(|&n| *n != time_node)
+                                     .map(|&node| {
+                                         match *node {
+                                             PlanNode::Where(ref c, ref p, _) => {
+                                                 PlanNode::Where(c.to_owned(),
+                                                                 p.to_owned(),
+                                                                 Some(bound.clone()))
+                                             }
+                                             _ => panic!(),
+                                         }
+                                     })
+                                     .collect();
+
+                new.replace(&group, new_nodes)
+            }
+        }
+
+        new
+    }
+
     fn group_nodes_into_and_predicate(group: &[&PlanNode]) -> PlanNode {
         let mut col_name = None;
         let mut predicate = None;
 
         for node in group {
             let (inner_col_name, inner_pred) = match **node {
-                PlanNode::Where(ref inner_c, ref inner_p) => (inner_c, inner_p),
+                PlanNode::Where(ref inner_c, ref inner_p, _) => (inner_c, inner_p),
                 _ => panic!("Grouped non-where node"),
             };
 
@@ -359,7 +487,7 @@ impl Plan {
         }
 
         match (col_name, predicate) {
-            (Some(c), Some(p)) => PlanNode::Where(c, p),
+            (Some(c), Some(p)) => PlanNode::Where(c, p, None),
             _ => panic!("Empty group"),
         }
     }
@@ -373,7 +501,7 @@ impl Plan {
                     match *node {
                         PlanNode::Select(_, _) => stage_types.insert(1),
                         PlanNode::Join(_, _) => stage_types.insert(2),
-                        PlanNode::Where(_, _) => stage_types.insert(3),
+                        PlanNode::Where(_, _, _) => stage_types.insert(3),
                         PlanNode::WhereId(_, _) => stage_types.insert(4),
                     };
                 }
