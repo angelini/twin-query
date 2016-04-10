@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::mpsc;
 
 use data::{ColumnName, Db, Ids, Data, Datum, Value};
-use plan::{Plan, Predicate, PlanNode};
+use plan::{Plan, Predicate, PlanNode, Stage};
 
 struct Cache<'a> {
     db: &'a Db,
@@ -142,15 +142,14 @@ fn find_data(db: &Db, cache: &Cache, node: &PlanNode) -> Result<(ColumnName, Fil
     }
 }
 
-fn exec_stage(db: &Db, cache: &Cache, stage: &[PlanNode])
-              -> Result<Vec<(ColumnName, Filtered)>, Error> {
+fn exec_stage(db: &Db, cache: &Cache, stage: &Stage) -> Result<Vec<(ColumnName, Filtered)>, Error> {
     let (tx, rx) = mpsc::channel();
 
     crossbeam::scope(|scope| {
-        for query_node in stage {
+        for query_node in &stage.nodes {
             let t_tx = tx.clone();
             scope.spawn(move || {
-                let (name, filtered) = find_data(&db, &cache, query_node).unwrap();
+                let (name, filtered) = find_data(&db, &cache, &query_node).unwrap();
                 t_tx.send((name, filtered)).unwrap();
             });
         }
