@@ -11,7 +11,7 @@ use std::fs::File;
 use std::io;
 use std::path;
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Hash)]
 pub enum Value {
     Bool(bool),
     Int(usize),

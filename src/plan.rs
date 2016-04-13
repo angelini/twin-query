@@ -1,4 +1,5 @@
 use petgraph::{Dfs, EdgeDirection, Graph};
+use petgraph::dot::Dot;
 use petgraph::graph::NodeIndex;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
@@ -9,7 +10,7 @@ use data::{ColumnName, Value};
 
 peg_file! grammar("grammar.rustpeg");
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Comparator {
     Equal,
     Greater,
@@ -30,7 +31,7 @@ impl Comparator {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Predicate {
     Constant(Comparator, Value),
     And(Box<Predicate>, Box<Predicate>),
@@ -71,7 +72,7 @@ pub enum QueryLine {
     Limit(usize),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// Open-closed interval
 /// min < time <= max
 pub struct TimeBound {
@@ -116,7 +117,7 @@ impl TimeBound {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PlanNode {
     Select(ColumnName, usize),
     Join(ColumnName, ColumnName),
@@ -205,11 +206,11 @@ fn parse_line(line: QueryLine, limit: usize) -> Vec<(PlanNode, Requires, Provide
 
 #[derive(Debug, Clone)]
 pub struct Stage {
-    pub nodes: Vec<PlanNode>,
+    pub nodes: HashSet<PlanNode>,
 }
 
 impl Stage {
-    pub fn new(nodes: Vec<PlanNode>) -> Stage {
+    pub fn new(nodes: HashSet<PlanNode>) -> Stage {
         Stage { nodes: nodes }
     }
 
@@ -218,32 +219,25 @@ impl Stage {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.nodes.len() == 0
+        self.nodes.is_empty()
     }
 
     pub fn len(&self) -> usize {
         self.nodes.len()
     }
 
-    fn index_of(&self, node: &PlanNode) -> Option<usize> {
-        self.nodes.iter().position(|n| n == node)
+    fn insert(&mut self, node: PlanNode) {
+        self.nodes.insert(node);
     }
 
-    fn push(&mut self, node: PlanNode) {
-        self.nodes.push(node)
-    }
-
-    fn replace(&mut self, remove: &[&PlanNode], mut add: Vec<PlanNode>) {
-        for rem in remove {
-            match self.index_of(rem) {
-                Some(idx) => {
-                    self.nodes.remove(idx);
-                }
-                None => panic!("Tried to remove non-existant node"),
-            }
+    fn replace(&mut self, to_remove: &[&PlanNode], to_add: Vec<PlanNode>) {
+        for remove in to_remove {
+            self.nodes.remove(remove);
         }
 
-        self.nodes.append(&mut add)
+        for add in to_add {
+            self.nodes.insert(add);
+        }
     }
 
     fn group_where_nodes_by_column(&self) -> Vec<Vec<&PlanNode>> {
@@ -284,6 +278,12 @@ impl Stage {
     }
 }
 
+impl Default for Stage {
+    fn default() -> Stage {
+        Stage::new(HashSet::new())
+    }
+}
+
 #[derive(Debug)]
 pub enum Error {
     ParseError(grammar::ParseError),
@@ -302,6 +302,9 @@ impl Plan {
     pub fn new(lines: Vec<QueryLine>) -> Plan {
         let graph = Self::build_graph(lines);
         let stages = Self::build_stages(&graph);
+
+        println!("{}", Dot::new(&graph));
+
         let mut plan = Plan { stages: stages };
         plan.optimize();
         plan
@@ -387,9 +390,9 @@ impl Plan {
                 let stage_index = (max_depth + 1) as usize;
 
                 if stage_index >= stages.len() {
-                    stages.push(Stage::new(vec![]))
+                    stages.push(Stage::default())
                 }
-                stages[stage_index].push(graph[node].clone());
+                stages[stage_index].insert(graph[node].clone());
             }
         }
 
